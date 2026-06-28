@@ -191,6 +191,7 @@ tr:hover td{background:var(--surface2)}
   <div class="spacer"></div>
   <span class="pill pill-idle" id="status-pill">Idle</span>
   <span class="pill pill-watch" id="watch-pill" style="display:none">Watching</span>
+  <span id="power-badge" title="CPU package power (RAPL). CPU only — does not include RAM, storage, or PSU losses." style="display:none;background:#1a1f28;border:1px solid var(--border);border-radius:20px;padding:3px 10px;font-size:12px;font-weight:600;font-family:var(--mono);cursor:default"></span>
   <button class="btn btn-primary" id="run-btn" onclick="startRun()">▶ Run Now</button>
   <button class="btn btn-danger" id="cancel-btn" onclick="cancelRun()" style="display:none">⬛ Cancel</button>
 </header>
@@ -736,6 +737,25 @@ function flash(msg, err=false) {
 }
 
 init();
+pollPower();
+setInterval(pollPower, 3000);
+
+async function pollPower() {
+  const r = await fetch('/api/power').catch(() => null);
+  if (!r || !r.ok) return;
+  const d = await r.json().catch(() => null);
+  if (!d || d.error) return;
+  const badge = document.getElementById('power-badge');
+  const pkg = d.package ?? 0;
+  const tdp = d.tdp_w ?? 10;
+  const pct = pkg / tdp;
+  const color = pct >= 0.9 ? 'var(--red)' : pct >= 0.6 ? 'var(--yellow)' : 'var(--green)';
+  badge.style.display = '';
+  badge.style.color = color;
+  badge.style.borderColor = color + '55';
+  badge.textContent = `⚡ ${pkg.toFixed(1)} W`;
+  badge.title = `CPU Package: ${d.package?.toFixed(2)} W\nCores: ${d.core?.toFixed(2)} W\nUncore: ${d.uncore?.toFixed(2)} W\nTDP limit: ${tdp} W\n\nCPU power only — excludes RAM, storage, and PSU losses.`;
+}
 </script>
 </body>
 </html>

@@ -390,5 +390,16 @@ def api_browse(path: str = "/home/ramin"):
         return JSONResponse({"error": "Permission denied"}, status_code=403)
 
 
+@app.get("/api/power")
+def api_power():
+    p = Path("/run/rapl-power")
+    if not p.exists():
+        return JSONResponse({"error": "rapl-daemon not running"}, status_code=503)
+    try:
+        return json.loads(p.read_text())
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=503)
+
+
 if __name__ == "__main__":
     uvicorn.run("app:app", host="0.0.0.0", port=7000, reload=False, log_level="info")
