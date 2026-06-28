@@ -390,6 +390,17 @@ def api_browse(path: str = "/home/ramin"):
         return JSONResponse({"error": "Permission denied"}, status_code=403)
 
 
+@app.get("/api/network")
+def api_network():
+    p = Path("/run/network-stats.json")
+    if not p.exists():
+        return JSONResponse({"error": "nethogs-daemon not running"}, status_code=503)
+    try:
+        return json.loads(p.read_text())
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=503)
+
+
 @app.get("/api/power")
 def api_power():
     p = Path("/run/rapl-power")

@@ -417,6 +417,35 @@ tr:hover td{background:var(--surface2)}
         </div>
       </div>
 
+      <!-- Network panel -->
+      <div class="stat-panel" style="border-left:1px solid var(--border);width:220px">
+        <div class="sp-title">Network <span style="font-size:9px;color:var(--muted);text-transform:none;letter-spacing:0" id="net-iface"></span></div>
+
+        <!-- RX/TX bars -->
+        <div style="margin-bottom:12px">
+          <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">
+            <span style="color:var(--green)">▼ Download</span>
+            <span style="color:var(--green);font-family:var(--mono);font-weight:700" id="net-rx">—</span>
+          </div>
+          <div style="height:5px;background:var(--border);border-radius:2px;overflow:hidden;margin-bottom:8px">
+            <div id="net-rx-bar" style="height:100%;background:var(--green);border-radius:2px;width:0;transition:width .5s ease"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">
+            <span style="color:var(--blue)">▲ Upload</span>
+            <span style="color:var(--blue);font-family:var(--mono);font-weight:700" id="net-tx">—</span>
+          </div>
+          <div style="height:5px;background:var(--border);border-radius:2px;overflow:hidden">
+            <div id="net-tx-bar" style="height:100%;background:var(--blue);border-radius:2px;width:0;transition:width .5s ease"></div>
+          </div>
+        </div>
+
+        <div class="sp-divider"></div>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin:8px 0 6px">Per Process</div>
+        <div id="net-procs" style="display:flex;flex-direction:column;gap:5px">
+          <div style="color:var(--muted);font-size:11px">Waiting for data…</div>
+        </div>
+      </div>
+
     </div>
 
     <!-- History -->
@@ -737,8 +766,57 @@ function flash(msg, err=false) {
 }
 
 init();
+pollNetwork();
+setInterval(pollNetwork, 2500);
 pollPower();
 setInterval(pollPower, 3000);
+
+async function pollNetwork() {
+  const r = await fetch('/api/network').catch(() => null);
+  if (!r || !r.ok) return;
+  const d = await r.json().catch(() => null);
+  if (!d || d.error) return;
+
+  const LINK_MBPS = 1000; // 1 GbE
+  const rx = d.rx_mbps ?? 0, tx = d.tx_mbps ?? 0;
+
+  document.getElementById('net-iface').textContent = d.iface ?? '';
+  document.getElementById('net-rx').textContent = fmtMbps(rx);
+  document.getElementById('net-tx').textContent = fmtMbps(tx);
+  document.getElementById('net-rx-bar').style.width = Math.min(100, rx / LINK_MBPS * 100) + '%';
+  document.getElementById('net-tx-bar').style.width = Math.min(100, tx / LINK_MBPS * 100) + '%';
+
+  const procs = d.processes ?? [];
+  const maxKbps = procs.length ? (procs[0].sent_kbps + procs[0].recv_kbps) : 1;
+  document.getElementById('net-procs').innerHTML = procs.length
+    ? procs.map(p => {
+        const total = p.sent_kbps + p.recv_kbps;
+        const barW = Math.round(total / maxKbps * 100);
+        const txStr = fmtKbps(p.sent_kbps), rxStr = fmtKbps(p.recv_kbps);
+        return `<div>
+          <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px">
+            <span style="color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:110px" title="${p.name} (pid ${p.pid})">${p.name}</span>
+            <span style="color:var(--muted);font-family:var(--mono);font-size:10px;white-space:nowrap;margin-left:4px">
+              <span style="color:var(--blue)">▲${txStr}</span> <span style="color:var(--green)">▼${rxStr}</span>
+            </span>
+          </div>
+          <div style="height:3px;background:var(--border);border-radius:1px;overflow:hidden">
+            <div style="height:100%;width:${barW}%;background:var(--purple);border-radius:1px;transition:width .5s ease"></div>
+          </div>
+        </div>`;
+      }).join('')
+    : '<div style="color:var(--muted);font-size:11px">No active traffic</div>';
+}
+
+function fmtMbps(mbps) {
+  if (mbps < 1) return (mbps * 1000).toFixed(0) + ' Kbps';
+  return mbps.toFixed(1) + ' Mbps';
+}
+function fmtKbps(kbps) {
+  if (kbps >= 1000) return (kbps / 1000).toFixed(1) + 'M';
+  if (kbps >= 1)    return kbps.toFixed(0) + 'K';
+  return '0';
+}
 
 async function pollPower() {
   const r = await fetch('/api/power').catch(() => null);
