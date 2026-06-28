@@ -390,13 +390,34 @@ def api_browse(path: str = "/home/ramin"):
         return JSONResponse({"error": "Permission denied"}, status_code=403)
 
 
+@app.get("/api/system")
+def api_system():
+    p = Path("/run/system-stats.json")
+    if not p.exists():
+        return JSONResponse({"error": "system-daemon not running"}, status_code=503)
+    try:
+        return json.loads(p.read_text())
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=503)
+
+
 @app.get("/api/network")
 def api_network():
     p = Path("/run/network-stats.json")
     if not p.exists():
         return JSONResponse({"error": "nethogs-daemon not running"}, status_code=503)
     try:
-        return json.loads(p.read_text())
+        data = json.loads(p.read_text())
+        # Merge Docker net labels if available
+        try:
+            docker = json.loads(Path("/run/docker-nets.json").read_text())
+            for iface in data.get("interfaces", []):
+                name = iface["name"]
+                if name in docker:
+                    iface["label"] = docker[name]
+        except Exception:
+            pass
+        return data
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=503)
 

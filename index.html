@@ -84,6 +84,14 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 hr{border:none;border-top:1px solid var(--border)}
 .sub-label{font-size:11px;color:var(--muted);margin-top:4px}
 
+/* ── System stats strip ── */
+.sys-bar{background:var(--surface2);border-bottom:1px solid var(--border);padding:6px 16px;display:flex;align-items:center;gap:20px;flex-shrink:0;font-size:12px;flex-wrap:nowrap;overflow:hidden}
+.sys-stat{display:flex;align-items:center;gap:6px;white-space:nowrap}
+.sys-label{color:var(--muted);font-size:11px}
+.sys-val{font-family:var(--mono);font-weight:600}
+.sys-bar-track{width:60px;height:4px;background:var(--border);border-radius:2px;overflow:hidden;flex-shrink:0}
+.sys-bar-fill{height:100%;border-radius:2px;transition:width .5s ease}
+
 /* ── Main content ── */
 .main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
 
@@ -191,10 +199,43 @@ tr:hover td{background:var(--surface2)}
   <div class="spacer"></div>
   <span class="pill pill-idle" id="status-pill">Idle</span>
   <span class="pill pill-watch" id="watch-pill" style="display:none">Watching</span>
-  <span id="power-badge" title="CPU package power (RAPL). CPU only — does not include RAM, storage, or PSU losses." style="display:none;background:#1a1f28;border:1px solid var(--border);border-radius:20px;padding:3px 10px;font-size:12px;font-weight:600;font-family:var(--mono);cursor:default"></span>
   <button class="btn btn-primary" id="run-btn" onclick="startRun()">▶ Run Now</button>
   <button class="btn btn-danger" id="cancel-btn" onclick="cancelRun()" style="display:none">⬛ Cancel</button>
 </header>
+
+<!-- ── System stats strip ── -->
+<div class="sys-bar">
+  <div class="sys-stat">
+    <span class="sys-label">CPU</span>
+    <span class="sys-val" id="sys-cpu">—</span>
+    <div class="sys-bar-track"><div class="sys-bar-fill" id="sys-cpu-bar" style="background:var(--blue)"></div></div>
+  </div>
+  <div class="sys-stat">
+    <span class="sys-label">Freq</span>
+    <span class="sys-val" id="sys-freq" style="color:var(--muted)">—</span>
+  </div>
+  <div class="sys-stat">
+    <span class="sys-label">Temp</span>
+    <span class="sys-val" id="sys-temp">—</span>
+  </div>
+  <div class="sys-stat">
+    <span class="sys-label">RAM</span>
+    <span class="sys-val" id="sys-ram">—</span>
+    <div class="sys-bar-track"><div class="sys-bar-fill" id="sys-ram-bar" style="background:var(--purple)"></div></div>
+  </div>
+  <div class="sys-stat">
+    <span class="sys-label">Package</span>
+    <span class="sys-val" id="sys-pkg">—</span>
+  </div>
+  <div class="sys-stat">
+    <span class="sys-label">Cores</span>
+    <span class="sys-val" id="sys-cores">—</span>
+  </div>
+  <div class="sys-stat" style="flex:1;justify-content:flex-end">
+    <div class="sys-bar-track" style="width:80px"><div class="sys-bar-fill" id="sys-pwr-bar" style="background:var(--green)"></div></div>
+    <span class="sys-label" id="sys-tdp-lbl" style="font-size:10px"></span>
+  </div>
+</div>
 
 <div class="body">
 
@@ -437,6 +478,12 @@ tr:hover td{background:var(--surface2)}
           <div style="height:5px;background:var(--border);border-radius:2px;overflow:hidden">
             <div id="net-tx-bar" style="height:100%;background:var(--blue);border-radius:2px;width:0;transition:width .5s ease"></div>
           </div>
+        </div>
+
+        <div class="sp-divider"></div>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin:8px 0 6px">Interfaces</div>
+        <div id="net-ifaces" style="display:flex;flex-direction:column;gap:4px;margin-bottom:8px">
+          <div style="color:var(--muted);font-size:11px">Waiting…</div>
         </div>
 
         <div class="sp-divider"></div>
@@ -766,10 +813,8 @@ function flash(msg, err=false) {
 }
 
 init();
-pollNetwork();
-setInterval(pollNetwork, 2500);
-pollPower();
-setInterval(pollPower, 3000);
+pollNetwork();  setInterval(pollNetwork, 2500);
+pollSystem();   setInterval(pollSystem, 2000);
 
 async function pollNetwork() {
   const r = await fetch('/api/network').catch(() => null);
@@ -777,7 +822,7 @@ async function pollNetwork() {
   const d = await r.json().catch(() => null);
   if (!d || d.error) return;
 
-  const LINK_MBPS = 1000; // 1 GbE
+  const LINK_MBPS = 1000;
   const rx = d.rx_mbps ?? 0, tx = d.tx_mbps ?? 0;
 
   document.getElementById('net-iface').textContent = d.iface ?? '';
@@ -786,18 +831,41 @@ async function pollNetwork() {
   document.getElementById('net-rx-bar').style.width = Math.min(100, rx / LINK_MBPS * 100) + '%';
   document.getElementById('net-tx-bar').style.width = Math.min(100, tx / LINK_MBPS * 100) + '%';
 
+  // Interfaces
+  const ifaces = (d.interfaces ?? []).filter(i => i.name !== d.iface || ifaces?.length === 1);
+  const allIfaces = d.interfaces ?? [];
+  const maxIfMbps = allIfaces.length ? Math.max(...allIfaces.map(i => i.rx_mbps + i.tx_mbps), 0.1) : 0.1;
+  document.getElementById('net-ifaces').innerHTML = allIfaces.length
+    ? allIfaces.map(i => {
+        const total = i.rx_mbps + i.tx_mbps;
+        const barW = Math.round(total / maxIfMbps * 100);
+        const lbl = i.label !== i.name ? `<span style="color:var(--yellow)">${i.label}</span>` : `<span style="color:var(--muted)">${i.name}</span>`;
+        return `<div>
+          <div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:2px">
+            ${lbl}
+            <span style="font-family:var(--mono);font-size:10px;white-space:nowrap;margin-left:4px">
+              <span style="color:var(--blue)">▲${fmtMbps(i.tx_mbps)}</span> <span style="color:var(--green)">▼${fmtMbps(i.rx_mbps)}</span>
+            </span>
+          </div>
+          <div style="height:2px;background:var(--border);border-radius:1px;overflow:hidden;margin-bottom:4px">
+            <div style="height:100%;width:${barW}%;background:var(--accent);border-radius:1px;transition:width .5s ease"></div>
+          </div>
+        </div>`;
+      }).join('')
+    : '<div style="color:var(--muted);font-size:11px">No traffic</div>';
+
+  // Processes
   const procs = d.processes ?? [];
-  const maxKbps = procs.length ? (procs[0].sent_kbps + procs[0].recv_kbps) : 1;
+  const maxKbps = procs.length ? Math.max(...procs.map(p => p.sent_kbps + p.recv_kbps), 0.1) : 0.1;
   document.getElementById('net-procs').innerHTML = procs.length
     ? procs.map(p => {
         const total = p.sent_kbps + p.recv_kbps;
         const barW = Math.round(total / maxKbps * 100);
-        const txStr = fmtKbps(p.sent_kbps), rxStr = fmtKbps(p.recv_kbps);
         return `<div>
           <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px">
-            <span style="color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:110px" title="${p.name} (pid ${p.pid})">${p.name}</span>
-            <span style="color:var(--muted);font-family:var(--mono);font-size:10px;white-space:nowrap;margin-left:4px">
-              <span style="color:var(--blue)">▲${txStr}</span> <span style="color:var(--green)">▼${rxStr}</span>
+            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100px" title="${p.name} (pid ${p.pid})">${p.name}</span>
+            <span style="font-family:var(--mono);font-size:10px;white-space:nowrap;margin-left:4px">
+              <span style="color:var(--blue)">▲${fmtKbps(p.sent_kbps)}</span> <span style="color:var(--green)">▼${fmtKbps(p.recv_kbps)}</span>
             </span>
           </div>
           <div style="height:3px;background:var(--border);border-radius:1px;overflow:hidden">
@@ -808,31 +876,54 @@ async function pollNetwork() {
     : '<div style="color:var(--muted);font-size:11px">No active traffic</div>';
 }
 
+async function pollSystem() {
+  const r = await fetch('/api/system').catch(() => null);
+  if (!r || !r.ok) return;
+  const d = await r.json().catch(() => null);
+  if (!d || d.error) return;
+
+  const cpu = d.cpu_pct ?? 0;
+  const temp = d.temp_c ?? 0;
+  const ramPct = d.ram_pct ?? 0;
+  const pkg = d.power?.package ?? 0;
+  const core = d.power?.core ?? 0;
+  const tdp = d.power?.tdp_w ?? 10;
+  const pwrPct = Math.min(100, pkg / tdp * 100);
+
+  const tempColor = temp >= 90 ? 'var(--red)' : temp >= 75 ? 'var(--yellow)' : 'var(--green)';
+  const cpuColor  = cpu  >= 85 ? 'var(--red)' : cpu  >= 60 ? 'var(--yellow)' : 'var(--blue)';
+  const pwrColor  = pwrPct >= 90 ? 'var(--red)' : pwrPct >= 60 ? 'var(--yellow)' : 'var(--green)';
+
+  document.getElementById('sys-cpu').textContent = cpu.toFixed(0) + '%';
+  document.getElementById('sys-cpu').style.color = cpuColor;
+  document.getElementById('sys-cpu-bar').style.width = cpu + '%';
+  document.getElementById('sys-cpu-bar').style.background = cpuColor;
+
+  document.getElementById('sys-freq').textContent = d.cpu_freq_mhz ? (d.cpu_freq_mhz / 1000).toFixed(2) + ' GHz' : '—';
+
+  document.getElementById('sys-temp').textContent = temp ? temp + '°C' : '—';
+  document.getElementById('sys-temp').style.color = tempColor;
+
+  document.getElementById('sys-ram').textContent = `${d.ram_used_gb}/${d.ram_total_gb} GB`;
+  document.getElementById('sys-ram-bar').style.width = ramPct + '%';
+
+  document.getElementById('sys-pkg').textContent  = pkg  ? pkg.toFixed(1)  + ' W' : '—';
+  document.getElementById('sys-cores').textContent = core ? core.toFixed(1) + ' W' : '—';
+  document.getElementById('sys-pkg').style.color   = pwrColor;
+
+  document.getElementById('sys-pwr-bar').style.width = pwrPct + '%';
+  document.getElementById('sys-pwr-bar').style.background = pwrColor;
+  document.getElementById('sys-tdp-lbl').textContent = `/ ${tdp}W TDP`;
+}
+
 function fmtMbps(mbps) {
-  if (mbps < 1) return (mbps * 1000).toFixed(0) + ' Kbps';
-  return mbps.toFixed(1) + ' Mbps';
+  if (mbps < 1) return (mbps * 1000).toFixed(0) + 'K';
+  return mbps.toFixed(1) + 'M';
 }
 function fmtKbps(kbps) {
   if (kbps >= 1000) return (kbps / 1000).toFixed(1) + 'M';
   if (kbps >= 1)    return kbps.toFixed(0) + 'K';
   return '0';
-}
-
-async function pollPower() {
-  const r = await fetch('/api/power').catch(() => null);
-  if (!r || !r.ok) return;
-  const d = await r.json().catch(() => null);
-  if (!d || d.error) return;
-  const badge = document.getElementById('power-badge');
-  const pkg = d.package ?? 0;
-  const tdp = d.tdp_w ?? 10;
-  const pct = pkg / tdp;
-  const color = pct >= 0.9 ? 'var(--red)' : pct >= 0.6 ? 'var(--yellow)' : 'var(--green)';
-  badge.style.display = '';
-  badge.style.color = color;
-  badge.style.borderColor = color + '55';
-  badge.textContent = `⚡ ${pkg.toFixed(1)} W`;
-  badge.title = `CPU Package: ${d.package?.toFixed(2)} W\nCores: ${d.core?.toFixed(2)} W\nUncore: ${d.uncore?.toFixed(2)} W\nTDP limit: ${tdp} W\n\nCPU power only — excludes RAM, storage, and PSU losses.`;
 }
 </script>
 </body>
