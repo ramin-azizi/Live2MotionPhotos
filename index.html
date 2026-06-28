@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Live2Motion Photos</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0d1117;--surface:#161b22;--surface2:#1c2128;--border:#30363d;
+  --text:#e6edf3;--muted:#848d97;
+  --green:#3fb950;--red:#f85149;--yellow:#d29922;--blue:#58a6ff;--purple:#bc8cff;
+  --accent:#1f6feb;--accent-h:#388bfd;
+  --r:6px;--mono:'SF Mono',Menlo,Monaco,'Cascadia Code','Fira Code',monospace;
+}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:14px;line-height:1.5;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+
+/* ── Header ── */
+.hdr{background:var(--surface);border-bottom:1px solid var(--border);padding:10px 20px;display:flex;align-items:center;gap:12px;flex-shrink:0;z-index:10}
+.hdr-title{font-size:15px;font-weight:600;display:flex;align-items:center;gap:8px}
+.hdr-title small{color:var(--muted);font-weight:400;font-size:13px}
+.spacer{flex:1}
+
+/* ── Pills ── */
+.pill{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:500;white-space:nowrap}
+.pill::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor}
+.pill-idle{background:#21262d;color:var(--muted)}
+.pill-running{background:#1c2d47;color:var(--blue)}
+.pill-running::before{animation:blink 1.2s infinite}
+.pill-done{background:#1a2f1a;color:var(--green)}
+.pill-error{background:#2d1a1a;color:var(--red)}
+.pill-watch{background:#2d1f2d;color:var(--purple)}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* ── Buttons ── */
+.btn{padding:5px 14px;border-radius:var(--r);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:13px;font-weight:500;cursor:pointer;display:inline-flex;align-items:center;gap:5px;transition:background .1s,border-color .1s;white-space:nowrap}
+.btn:hover{background:#262c36;border-color:#6e7681}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn-primary:hover:not(:disabled){background:var(--accent-h);border-color:var(--accent-h)}
+.btn-danger{background:#3d1515;border-color:#da3633;color:var(--red)}
+.btn-danger:hover{background:#551d1d}
+.btn-sm{padding:3px 9px;font-size:12px}
+.btn-ghost{background:none;border-color:transparent;color:var(--muted);padding:4px 6px;font-size:13px}
+.btn-ghost:hover{background:var(--surface2);border-color:var(--border);color:var(--text)}
+
+/* ── Body layout ── */
+.body{display:flex;flex:1;overflow:hidden}
+
+/* ── Sidebar ── */
+.sidebar{width:290px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);overflow-y:auto;padding:14px 14px 20px;display:flex;flex-direction:column;gap:16px}
+.sec-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin-bottom:10px}
+
+/* ── Form fields ── */
+.field{margin-bottom:10px}
+.field>label{display:block;font-size:11px;color:var(--muted);margin-bottom:3px}
+.dir-row{display:flex;gap:4px}
+.dir-row input{flex:1;min-width:0}
+.field input[type=text],.field input[type=number],.field select{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:var(--r);color:var(--text);padding:5px 8px;font-size:12px;font-family:var(--mono);outline:none;transition:border-color .1s}
+.field input:focus,.field select:focus{border-color:var(--accent)}
+
+/* ── Flag checkboxes ── */
+.flags{display:flex;flex-direction:column;gap:5px;margin-bottom:10px}
+.flag{display:flex;align-items:center;gap:7px;cursor:pointer;user-select:none;padding:2px 0;border-radius:4px}
+.flag:hover{background:var(--surface2)}
+.flag input[type=checkbox]{width:13px;height:13px;accent-color:var(--accent);cursor:pointer;flex-shrink:0}
+.flag .fn{font-size:13px;flex:1}
+.flag .ft{font-size:10px;color:var(--muted);font-family:var(--mono)}
+
+/* ── Tooltip system ── */
+#tooltip{
+  position:fixed;background:#2d333b;color:var(--text);
+  border:1px solid #444c56;border-radius:var(--r);
+  padding:8px 11px;font-size:12px;line-height:1.45;max-width:230px;
+  z-index:9999;pointer-events:none;display:none;
+  box-shadow:0 8px 24px rgba(0,0,0,.55);
+}
+.tip-icon{font-size:11px;color:var(--muted);cursor:help;margin-left:2px;flex-shrink:0;line-height:1}
+.tip-icon:hover{color:var(--blue)}
+
+/* ── Warnings / info ── */
+.warn{background:#2d1f00;border:1px solid #6a4f00;border-radius:var(--r);padding:7px 9px;font-size:11px;color:var(--yellow);margin-bottom:8px}
+.info-box{background:#0d1c2d;border:1px solid #1f3a5a;border-radius:var(--r);padding:7px 9px;font-size:11px;color:var(--blue);margin-top:6px}
+hr{border:none;border-top:1px solid var(--border)}
+.sub-label{font-size:11px;color:var(--muted);margin-top:4px}
+
+/* ── Main content ── */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+
+/* ── Slim status bar ── */
+.run-bar{background:var(--surface);border-bottom:1px solid var(--border);padding:7px 16px;display:flex;align-items:center;gap:14px;flex-shrink:0;font-size:12px}
+.prog-track{flex:1;height:4px;background:var(--border);border-radius:2px;overflow:hidden}
+.prog-fill{height:100%;background:var(--accent);border-radius:2px;transition:width .4s ease;width:0}
+.prog-label{color:var(--muted);white-space:nowrap;min-width:140px;text-align:right}
+
+/* ── Content row: terminal + stats panel ── */
+.content-row{flex:1;display:flex;overflow:hidden;min-height:0}
+
+/* ── Terminal ── */
+.term-section{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;border-right:1px solid var(--border)}
+.term{flex:1;overflow-y:auto;background:#010409;padding:12px 14px;font-family:var(--mono);font-size:12px;line-height:1.65;min-height:0}
+.term-ph{color:var(--muted);padding:28px 0;text-align:center}
+.ln{display:block;white-space:pre-wrap;word-break:break-all}
+.ln-ts{color:#3d4451}
+.ln-warn{color:var(--yellow)}.ln-warn .ln-ts{color:#5a4a00}
+.ln-err{color:var(--red)}.ln-err .ln-ts{color:#5a1a1a}
+.ln-ok{color:var(--green)}
+.ln-prog{color:var(--blue);font-weight:600}
+.ln-cmd{color:#3d4451;font-style:italic}
+.ln-trigger{color:#e3b341;font-weight:600}
+
+/* ── Stats panel ── */
+.stat-panel{width:210px;flex-shrink:0;background:var(--surface);display:flex;flex-direction:column;padding:16px 14px;gap:0;overflow-y:auto}
+.sp-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin-bottom:14px}
+
+/* Donut chart */
+.donut-wrap{position:relative;width:100px;height:100px;margin:0 auto 14px}
+.donut-svg{width:100%;height:100%;transform:rotate(-90deg)}
+.donut-label{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:var(--mono)}
+.donut-pct{font-size:22px;font-weight:700;line-height:1}
+.donut-sub{font-size:10px;color:var(--muted);margin-top:1px}
+
+/* Stat rows */
+.sp-row{display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)}
+.sp-row:last-of-type{border-bottom:none}
+.sp-label{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
+.sp-label .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.sp-val{font-size:15px;font-weight:700;font-family:var(--mono)}
+.sp-val.c-green{color:var(--green)}.sp-val.c-yellow{color:var(--yellow)}
+.sp-val.c-red{color:var(--red)}.sp-val.c-blue{color:var(--blue)}.sp-val.c-muted{color:var(--muted)}
+.sp-divider{border-top:1px solid var(--border);margin:10px 0}
+.sp-file{font-size:10px;color:var(--muted);margin-top:8px;word-break:break-all;font-family:var(--mono);line-height:1.4}
+.sp-file strong{display:block;color:var(--text);font-size:11px;margin-bottom:2px;font-family:inherit}
+
+/* ── History ── */
+.hist-wrap{flex-shrink:0;max-height:175px;overflow-y:auto;border-top:1px solid var(--border);background:var(--surface)}
+.hist-hdr{padding:7px 16px 3px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);position:sticky;top:0;background:var(--surface)}
+table{width:100%;border-collapse:collapse}
+th,td{padding:5px 16px;text-align:left;font-size:12px;white-space:nowrap}
+th{color:var(--muted);font-weight:500}
+td{border-top:1px solid var(--border)}
+tr:hover td{background:var(--surface2)}
+.badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:500}
+.bk-ok{background:#1a2f1a;color:var(--green)}.bk-err{background:#2d1a1a;color:var(--red)}
+.bk-manual{background:#1c2d47;color:var(--blue)}.bk-schedule{background:#2d2500;color:var(--yellow)}
+.bk-watch{background:#2d1f2d;color:var(--purple)}
+
+/* ── Folder browser modal ── */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:500;display:flex;align-items:center;justify-content:center}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:10px;width:500px;max-width:95vw;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 16px 48px rgba(0,0,0,.6)}
+.modal-hdr{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.modal-hdr h3{font-size:14px;font-weight:600}
+.modal-close{background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;line-height:1;padding:2px 6px;border-radius:4px}
+.modal-close:hover{background:var(--surface2);color:var(--text)}
+.breadcrumb{padding:10px 16px 6px;font-size:12px;font-family:var(--mono);color:var(--muted);border-bottom:1px solid var(--border);white-space:nowrap;overflow-x:auto}
+.breadcrumb span{cursor:pointer;color:var(--blue)}
+.breadcrumb span:hover{text-decoration:underline}
+.browser-list{flex:1;overflow-y:auto;padding:6px 0}
+.browser-item{padding:7px 16px;cursor:pointer;font-size:13px;display:flex;align-items:center;gap:8px}
+.browser-item:hover{background:var(--surface2)}
+.browser-item.up{color:var(--muted);font-style:italic}
+.modal-footer{padding:12px 16px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:10px;flex-shrink:0}
+.modal-path{font-size:11px;font-family:var(--mono);color:var(--muted);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+</style>
+</head>
+<body>
+
+<!-- ── Floating tooltip ── -->
+<div id="tooltip"></div>
+
+<!-- ── Folder browser modal ── -->
+<div class="modal-bg" id="browser-bg" style="display:none" onclick="if(event.target===this)closeBrowser()">
+  <div class="modal">
+    <div class="modal-hdr">
+      <h3>📁 Browse Folders</h3>
+      <button class="modal-close" onclick="closeBrowser()">✕</button>
+    </div>
+    <div class="breadcrumb" id="browser-crumb"></div>
+    <div class="browser-list" id="browser-list"></div>
+    <div class="modal-footer">
+      <span class="modal-path" id="browser-cur-path"></span>
+      <button class="btn" onclick="closeBrowser()">Cancel</button>
+      <button class="btn btn-primary" onclick="selectFolder()">Select This Folder</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Header ── -->
+<header class="hdr">
+  <div class="hdr-title">🎞 Live2Motion <small>Photos</small></div>
+  <div class="spacer"></div>
+  <span class="pill pill-idle" id="status-pill">Idle</span>
+  <span class="pill pill-watch" id="watch-pill" style="display:none">Watching</span>
+  <button class="btn btn-primary" id="run-btn" onclick="startRun()">▶ Run Now</button>
+  <button class="btn btn-danger" id="cancel-btn" onclick="cancelRun()" style="display:none">⬛ Cancel</button>
+</header>
+
+<div class="body">
+
+  <!-- ── Sidebar ── -->
+  <aside class="sidebar">
+
+    <section>
+      <div class="sec-title">⚙ Settings</div>
+
+      <div class="field">
+        <label>Input Directory</label>
+        <div class="dir-row">
+          <input type="text" id="input_directory" placeholder="/home/ramin/shared">
+          <button class="btn btn-sm" onclick="openBrowser('input_directory')" data-tip="Browse the server filesystem to pick the folder containing your Live Photos.">📁</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Output Directory <span style="font-size:10px;color:var(--muted)">(empty = use Overwrite)</span></label>
+        <div class="dir-row">
+          <input type="text" id="output_directory" placeholder="(in-place)">
+          <button class="btn btn-sm" onclick="openBrowser('output_directory')" data-tip="Browse to choose where muxed files are saved. Leave the field empty to overwrite originals in place.">📁</button>
+        </div>
+      </div>
+
+      <div class="flags">
+
+        <label class="flag">
+          <input type="checkbox" id="recursive">
+          <span class="fn">Recursive</span>
+          <span class="ft">-r</span>
+          <span class="tip-icon" data-tip="Scan all subdirectories inside the Input Directory, not just the top level. Essential when photos are organised in subfolders by person or date.">ⓘ</span>
+        </label>
+
+        <label class="flag">
+          <input type="checkbox" id="exif_match">
+          <span class="fn">EXIF Match</span>
+          <span class="ft">-em</span>
+          <span class="tip-icon" data-tip="Match images with their video clips using embedded EXIF metadata instead of filename. More reliable for iPhone exports where filenames may not align exactly (e.g. IMG_1234.HEIC paired with IMG_1234(2).MOV).">ⓘ</span>
+        </label>
+
+        <label class="flag">
+          <input type="checkbox" id="incremental_mode" onchange="checkIncremental()">
+          <span class="fn">Incremental Mode</span>
+          <span class="ft">-im</span>
+          <span class="tip-icon" data-tip="Skip files whose output already exists as a Motion Photo. Ideal for re-running after adding new photos to the library without reprocessing everything. Requires an Output Directory to be set.">ⓘ</span>
+        </label>
+
+        <label class="flag">
+          <input type="checkbox" id="copy_unmuxed">
+          <span class="fn">Copy Unmuxed Files</span>
+          <span class="ft">-cu</span>
+          <span class="tip-icon" data-tip="Copy regular photos (JPEGs, PNGs) and standalone videos that have no matching Live Photo pair to the Output Directory unchanged. Use this when you want the output folder to be a complete copy of your library.">ⓘ</span>
+        </label>
+
+        <label class="flag">
+          <input type="checkbox" id="overwrite" onchange="checkOverwrite()">
+          <span class="fn">Overwrite Originals</span>
+          <span class="ft">-o</span>
+          <span class="tip-icon" data-tip="Replace the original image file in-place with the muxed Motion Photo. No Output Directory needed. The .MOV video file remains. Use with caution — originals cannot be recovered without a backup.">ⓘ</span>
+        </label>
+
+        <label class="flag">
+          <input type="checkbox" id="delete_video">
+          <span class="fn">Delete Video After Mux</span>
+          <span class="ft">-dv</span>
+          <span class="tip-icon" data-tip="Remove the original .MOV video file after it has been embedded into the Motion Photo. Frees up disk space. This cannot be undone — only enable if you are confident the mux succeeded.">ⓘ</span>
+        </label>
+
+        <label class="flag">
+          <input type="checkbox" id="keep_temp">
+          <span class="fn">Keep Temp Files</span>
+          <span class="ft">-kt</span>
+          <span class="tip-icon" data-tip="Keep the two temporary files created during the muxing process instead of deleting them automatically. Useful for debugging if output files appear corrupt or incomplete.">ⓘ</span>
+        </label>
+
+        <label class="flag">
+          <input type="checkbox" id="no_xmp">
+          <span class="fn">Skip XMP Metadata</span>
+          <span class="ft">-nx</span>
+          <span class="tip-icon" data-tip="Do not copy XMP metadata (creation date, camera model, GPS location, etc.) from the source image into the output. Slightly faster, but the output will lack important metadata fields.">ⓘ</span>
+        </label>
+
+        <label class="flag">
+          <input type="checkbox" id="verbose">
+          <span class="fn">Verbose Output</span>
+          <span class="ft">-v</span>
+          <span class="tip-icon" data-tip="Print detailed step-by-step information for every file being processed. Makes the progress log much more detailed — useful for diagnosing issues with specific files.">ⓘ</span>
+        </label>
+
+      </div>
+
+      <div class="warn" id="warn-overwrite" style="display:none">⚠ Overwrite replaces originals in place. Ensure you have a backup first.</div>
+      <div class="warn" id="warn-incremental" style="display:none">⚠ Incremental mode requires an Output Directory to be set.</div>
+
+      <button class="btn btn-primary" onclick="saveSettings()" style="width:100%">💾 Save Settings</button>
+    </section>
+
+    <hr>
+
+    <section>
+      <div class="sec-title">🕐 Schedule</div>
+      <label class="flag" style="margin-bottom:8px">
+        <input type="checkbox" id="schedule_enabled" onchange="onScheduleToggle()">
+        <span class="fn">Enable scheduled runs</span>
+        <span class="tip-icon" data-tip="Automatically run the conversion job on a cron schedule. Useful for keeping your library up to date after regular photo imports without manual intervention.">ⓘ</span>
+      </label>
+      <div id="sched-opts">
+        <div class="field">
+          <label>Preset</label>
+          <select id="schedule_preset" onchange="onPresetChange()">
+            <option value="0 * * * *">Hourly</option>
+            <option value="0 2 * * *">Daily at 2 AM</option>
+            <option value="0 2 * * 0">Weekly (Sun 2 AM)</option>
+            <option value="custom">Custom cron…</option>
+          </select>
+        </div>
+        <div class="field" id="cron-row" style="display:none">
+          <label>Cron expression
+            <span class="tip-icon" data-tip="Standard 5-field cron format: minute hour day month weekday. Example: '0 3 * * 1' runs at 3:00 AM every Monday. '*/30 * * * *' runs every 30 minutes.">ⓘ</span>
+          </label>
+          <input type="text" id="schedule_cron" placeholder="0 2 * * *">
+        </div>
+        <div class="sub-label" id="next-run-lbl"></div>
+      </div>
+    </section>
+
+    <hr>
+
+    <section>
+      <div class="sec-title">👁 Watch for New Media</div>
+      <label class="flag" style="margin-bottom:8px">
+        <input type="checkbox" id="watch_enabled" onchange="onWatchToggle()">
+        <span class="fn">Auto-run on new files</span>
+        <span class="tip-icon" data-tip="Monitor the Input Directory for new .HEIC, .JPEG, .MOV, or .MP4 files. After new files stop arriving (debounce period), a conversion run is triggered automatically — ideal for post-import workflows.">ⓘ</span>
+      </label>
+      <div id="watch-opts">
+        <div class="field">
+          <label>Debounce (seconds)
+            <span class="tip-icon" data-tip="How long to wait after the last file arrives before triggering a run. Set this higher than the time it takes to fully transfer a batch of photos from your iPhone — typically 60–300 seconds.">ⓘ</span>
+          </label>
+          <input type="number" id="watch_debounce" value="300" min="10" max="3600">
+        </div>
+        <div class="info-box" id="watch-info" style="display:none">
+          Watching Input Directory for new .HEIC / .JPEG / .MOV / .MP4 files. Triggers after the debounce period of inactivity.
+        </div>
+      </div>
+    </section>
+
+  </aside>
+
+  <!-- ── Main ── -->
+  <main class="main">
+
+    <!-- Slim progress bar row -->
+    <div class="run-bar">
+      <div class="prog-track"><div class="prog-fill" id="prog-fill"></div></div>
+      <div class="prog-label" id="prog-label">No active run</div>
+      <span id="run-timer" style="color:var(--muted);font-size:11px;min-width:60px;text-align:right"></span>
+    </div>
+
+    <!-- Terminal + Stats side by side -->
+    <div class="content-row">
+
+      <!-- Terminal -->
+      <div class="term-section">
+        <div class="term" id="term">
+          <div class="term-ph" id="term-ph">No active run — click ▶ Run Now or configure a schedule.</div>
+        </div>
+      </div>
+
+      <!-- Stats panel -->
+      <div class="stat-panel">
+        <div class="sp-title">Statistics</div>
+
+        <!-- Donut chart -->
+        <div class="donut-wrap">
+          <svg class="donut-svg" viewBox="0 0 42 42" xmlns="http://www.w3.org/2000/svg">
+            <!-- background ring -->
+            <circle cx="21" cy="21" r="15.915" fill="none" stroke="var(--border)" stroke-width="3.5"/>
+            <!-- converted (green) -->
+            <circle id="d-ok"   cx="21" cy="21" r="15.915" fill="none" stroke="var(--green)"  stroke-width="3.5" stroke-dasharray="0 100" stroke-dashoffset="25"/>
+            <!-- skipped (yellow) -->
+            <circle id="d-skip" cx="21" cy="21" r="15.915" fill="none" stroke="var(--yellow)" stroke-width="3.5" stroke-dasharray="0 100" stroke-dashoffset="25"/>
+            <!-- errors (red) -->
+            <circle id="d-err"  cx="21" cy="21" r="15.915" fill="none" stroke="var(--red)"    stroke-width="3.5" stroke-dasharray="0 100" stroke-dashoffset="25"/>
+          </svg>
+          <div class="donut-label">
+            <span class="donut-pct" id="d-pct">0</span>
+            <span class="donut-sub">%</span>
+          </div>
+        </div>
+
+        <!-- Stat rows -->
+        <div class="sp-row">
+          <span class="sp-label"><span class="dot" style="background:var(--muted)"></span>Total Pairs</span>
+          <span class="sp-val c-muted" id="sp-total">—</span>
+        </div>
+        <div class="sp-row">
+          <span class="sp-label"><span class="dot" style="background:var(--green)"></span>Completed</span>
+          <span class="sp-val c-green" id="sp-conv">0</span>
+        </div>
+        <div class="sp-row">
+          <span class="sp-label"><span class="dot" style="background:var(--yellow)"></span>Skipped</span>
+          <span class="sp-val c-yellow" id="sp-skip">0</span>
+        </div>
+        <div class="sp-row">
+          <span class="sp-label"><span class="dot" style="background:var(--red)"></span>Errors</span>
+          <span class="sp-val c-red" id="sp-err">0</span>
+        </div>
+        <div class="sp-row">
+          <span class="sp-label"><span class="dot" style="background:var(--blue)"></span>Remaining</span>
+          <span class="sp-val c-blue" id="sp-remain">—</span>
+        </div>
+
+        <div class="sp-divider"></div>
+        <div class="sp-file" id="sp-file" style="display:none">
+          <strong>Processing:</strong>
+          <span id="sp-file-name"></span>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- History -->
+    <div class="hist-wrap">
+      <div class="hist-hdr">Run History</div>
+      <table>
+        <thead><tr><th>Time</th><th>Trigger</th><th>Duration</th><th>Converted</th><th>Skipped</th><th>Errors</th><th>Result</th></tr></thead>
+        <tbody id="hist-body"><tr><td colspan="7" style="color:var(--muted);text-align:center;padding:10px 16px">No runs yet</td></tr></tbody>
+      </table>
+    </div>
+
+  </main>
+</div>
+
+<script>
+let sse = null, isRunning = false, startedAt = null, tickTimer = null;
+
+// ── Tooltip ───────────────────────────────────────────────────────────────────
+const tooltip = document.getElementById('tooltip');
+document.querySelectorAll('[data-tip]').forEach(el => {
+  el.addEventListener('mouseenter', e => { tooltip.textContent = el.dataset.tip; tooltip.style.display = 'block'; moveTip(e); });
+  el.addEventListener('mousemove', moveTip);
+  el.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
+});
+function moveTip(e) {
+  const x = e.clientX + 14, y = e.clientY - 10;
+  const w = tooltip.offsetWidth, h = tooltip.offsetHeight;
+  tooltip.style.left = (x + w > innerWidth  ? x - w - 24 : x) + 'px';
+  tooltip.style.top  = (y + h > innerHeight ? y - h + 10 : y) + 'px';
+}
+
+// ── Folder browser ────────────────────────────────────────────────────────────
+let browserTarget = null, browserPath = '/home/ramin';
+
+function openBrowser(target) {
+  browserTarget = target;
+  document.getElementById('browser-bg').style.display = 'flex';
+  browseTo(document.getElementById(target).value || '/home/ramin');
+}
+function closeBrowser() { document.getElementById('browser-bg').style.display = 'none'; }
+function selectFolder() {
+  document.getElementById(browserTarget).value = browserPath;
+  closeBrowser();
+  checkIncremental();
+}
+async function browseTo(path) {
+  const r = await fetch('/api/browse?path=' + encodeURIComponent(path)).then(r => r.json());
+  if (r.error) return;
+  browserPath = r.path;
+  document.getElementById('browser-cur-path').textContent = r.path;
+
+  // Breadcrumb
+  const parts = r.path.split('/').filter(Boolean);
+  document.getElementById('browser-crumb').innerHTML =
+    `<span onclick="browseTo('/')">/</span>` +
+    parts.map((p, i) => ` <span onclick="browseTo('/${parts.slice(0,i+1).join('/')}')">${p}</span> /`).join('');
+
+  // List
+  const list = document.getElementById('browser-list');
+  let html = r.parent ? `<div class="browser-item up" onclick="browseTo('${esc(r.parent)}')">↑ ..</div>` : '';
+  html += r.dirs.map(d => `<div class="browser-item" onclick="browseTo('${esc(r.path + '/' + d)}')">📁 ${d}</div>`).join('');
+  list.innerHTML = html || '<div style="padding:12px 16px;color:var(--muted);font-size:12px">No subdirectories</div>';
+}
+const esc = s => s.replace(/'/g, "\\'");
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+async function init() {
+  await loadConfig();
+  const s = await fetchStatus().catch(() => null);
+  if (s?.running) { setRunning(true); connectSSE(0); }
+  setInterval(pollStatus, 5000);
+}
+
+// ── Config ────────────────────────────────────────────────────────────────────
+async function loadConfig() {
+  const c = await fetch('/api/config').then(r => r.json());
+  for (const id of ['input_directory','output_directory','recursive','exif_match','incremental_mode',
+      'copy_unmuxed','overwrite','delete_video','keep_temp','no_xmp','verbose',
+      'schedule_enabled','schedule_cron','watch_enabled','watch_debounce']) {
+    const el = document.getElementById(id); if (!el) continue;
+    el.type === 'checkbox' ? (el.checked = !!c[id]) : (el.value = c[id] ?? '');
+  }
+  syncPreset(c.schedule_cron || '0 2 * * *');
+  checkOverwrite(); checkIncremental(); onScheduleToggle(); onWatchToggle();
+}
+
+async function saveSettings() {
+  const cfg = formConfig();
+  await fetch('/api/config', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(cfg)});
+  flash('✓ Saved');
+  await pollStatus();
+}
+
+function formConfig() {
+  const preset = document.getElementById('schedule_preset').value;
+  return {
+    input_directory:  gv('input_directory'),
+    output_directory: gv('output_directory'),
+    recursive:        gc('recursive'),
+    exif_match:       gc('exif_match'),
+    incremental_mode: gc('incremental_mode'),
+    copy_unmuxed:     gc('copy_unmuxed'),
+    overwrite:        gc('overwrite'),
+    delete_video:     gc('delete_video'),
+    keep_temp:        gc('keep_temp'),
+    no_xmp:           gc('no_xmp'),
+    verbose:          gc('verbose'),
+    schedule_enabled: gc('schedule_enabled'),
+    schedule_cron:    preset === 'custom' ? gv('schedule_cron') : preset,
+    watch_enabled:    gc('watch_enabled'),
+    watch_debounce:   parseInt(gv('watch_debounce')) || 300,
+  };
+}
+const gv = id => document.getElementById(id)?.value ?? '';
+const gc = id => document.getElementById(id)?.checked ?? false;
+
+// ── Run control ───────────────────────────────────────────────────────────────
+async function startRun() {
+  const r = await fetch('/api/run', {method:'POST'});
+  if (r.status === 409) { flash('Already running', true); return; }
+  clearTerm();
+  setRunning(true);
+  connectSSE(0);
+}
+async function cancelRun() { await fetch('/api/cancel', {method:'POST'}); }
+
+// ── SSE ───────────────────────────────────────────────────────────────────────
+function connectSSE(fromLine) {
+  if (sse) { sse.close(); sse = null; }
+  sse = new EventSource(`/api/progress?from_line=${fromLine}`);
+  sse.onmessage = e => {
+    const d = JSON.parse(e.data);
+    if (d.done) {
+      sse.close(); sse = null;
+      updateStats(d.stats);
+      if (d.history) renderHistory(d.history);
+      setRunning(false);
+      setStatus(d.stats?.errors > 0 ? 'error' : 'done');
+      document.getElementById('sp-file').style.display = 'none';
+      return;
+    }
+    if (d.line != null) { appendLine(d.line); updateStats(d.stats); }
+  };
+  sse.onerror = () => {};
+}
+
+// ── Status poll ───────────────────────────────────────────────────────────────
+async function pollStatus() {
+  const s = await fetchStatus().catch(() => null); if (!s) return;
+  if (s.running && !isRunning) { setRunning(true); connectSSE(0); }
+  if (!s.running && isRunning && !sse) { setRunning(false); }
+  updateStats(s.stats);
+  if (s.history?.length) renderHistory(s.history);
+  document.getElementById('next-run-lbl').textContent =
+    s.next_run ? `Next: ${new Date(s.next_run).toLocaleString()}` : '';
+  document.getElementById('watch-pill').style.display = s.watch_active ? '' : 'none';
+}
+const fetchStatus = () => fetch('/api/status').then(r => r.json());
+
+// ── Terminal ──────────────────────────────────────────────────────────────────
+function clearTerm() {
+  document.getElementById('term').innerHTML = '';
+  updateStats({total:0, current:0, converted:0, skipped:0, errors:0, current_file:''});
+}
+function appendLine(raw) {
+  const t = document.getElementById('term');
+  document.getElementById('term-ph')?.remove();
+  const sp = document.createElement('span');
+  const m = raw.match(/^(\[\d{2}:\d{2}:\d{2}\] )(.*)/s);
+  if (m) {
+    const ts = document.createElement('span');
+    ts.className = 'ln-ts'; ts.textContent = m[1];
+    sp.appendChild(ts);
+    sp.appendChild(document.createTextNode(m[2]));
+  } else { sp.textContent = raw; }
+  sp.className = 'ln ' + classLine(raw);
+  t.appendChild(sp);
+  t.appendChild(document.createTextNode('\n'));
+  if (t.scrollHeight - t.scrollTop < t.clientHeight + 300) t.scrollTop = t.scrollHeight;
+}
+function classLine(l) {
+  if (l.includes('[ERROR]'))             return 'ln-err';
+  if (l.includes('[WARNING]'))           return 'ln-warn';
+  if (l.includes('Writing output file')) return 'ln-ok';
+  if (/\] \$ /.test(l))                 return 'ln-cmd';
+  if (l.includes('▶ Triggered'))        return 'ln-trigger';
+  if (/=+\[/.test(l))                   return 'ln-prog';
+  return '';
+}
+
+// ── Stats update ──────────────────────────────────────────────────────────────
+function updateStats(s) {
+  if (!s) return;
+  const total = s.total || 0;
+  const conv  = s.converted || 0;
+  const skip  = s.skipped || 0;
+  const errs  = s.errors || 0;
+  const done  = conv + skip + errs;
+  const remain = total > 0 ? Math.max(0, total - done) : (isRunning ? '…' : '—');
+  const pct   = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
+
+  // Slim progress bar
+  document.getElementById('prog-fill').style.width = pct + '%';
+  document.getElementById('prog-label').textContent =
+    total > 0 ? `${done} / ${total} pairs  (${pct}%)`
+    : isRunning ? 'Scanning metadata…' : 'No active run';
+
+  // Stat panel rows
+  document.getElementById('sp-total').textContent  = total > 0 ? total : '—';
+  document.getElementById('sp-conv').textContent   = conv;
+  document.getElementById('sp-skip').textContent   = skip;
+  document.getElementById('sp-err').textContent    = errs;
+  document.getElementById('sp-remain').textContent = remain;
+
+  // Donut
+  document.getElementById('d-pct').textContent = pct;
+  if (total > 0) {
+    const okPct   = (conv / total) * 100;
+    const skipPct = (skip / total) * 100;
+    const errPct  = (errs / total) * 100;
+    setSeg('d-ok',   okPct,   25);
+    setSeg('d-skip', skipPct, 25 - okPct);
+    setSeg('d-err',  errPct,  25 - okPct - skipPct);
+  } else {
+    ['d-ok','d-skip','d-err'].forEach(id => setSeg(id, 0, 25));
+  }
+
+  // Current file
+  if (s.current_file) {
+    document.getElementById('sp-file').style.display = '';
+    document.getElementById('sp-file-name').textContent = s.current_file;
+  }
+}
+
+function setSeg(id, pct, offset) {
+  const el = document.getElementById(id);
+  el.setAttribute('stroke-dasharray', `${pct.toFixed(2)} ${(100-pct).toFixed(2)}`);
+  el.setAttribute('stroke-dashoffset', offset.toFixed(2));
+}
+
+// ── History ───────────────────────────────────────────────────────────────────
+function renderHistory(h) {
+  if (!h.length) return;
+  document.getElementById('hist-body').innerHTML = h.map(r => `
+    <tr>
+      <td style="color:var(--muted)">${r.time}</td>
+      <td><span class="badge bk-${r.trigger}">${r.trigger}</span></td>
+      <td style="color:var(--muted)">${r.duration}</td>
+      <td style="color:var(--green)">${r.converted}</td>
+      <td style="color:var(--yellow)">${r.skipped ?? 0}</td>
+      <td style="color:${r.errors?'var(--red)':'var(--muted)'}">${r.errors}</td>
+      <td><span class="badge ${r.exit_code===0?'bk-ok':'bk-err'}">${r.exit_code===0?'OK':'Failed'}</span></td>
+    </tr>`).join('');
+}
+
+// ── UI helpers ────────────────────────────────────────────────────────────────
+function setRunning(v) {
+  isRunning = v;
+  document.getElementById('run-btn').style.display    = v ? 'none' : '';
+  document.getElementById('cancel-btn').style.display = v ? '' : 'none';
+  if (v) {
+    startedAt = Date.now(); setStatus('running');
+    tickTimer = setInterval(() => {
+      const s = Math.floor((Date.now() - startedAt) / 1000);
+      document.getElementById('run-timer').textContent = `${Math.floor(s/60)}m ${s%60}s`;
+    }, 1000);
+  } else {
+    clearInterval(tickTimer);
+    document.getElementById('run-timer').textContent = '';
+  }
+}
+
+function setStatus(st) {
+  const pill = document.getElementById('status-pill');
+  pill.className = 'pill pill-' + st;
+  pill.textContent = {idle:'Idle', running:'Running…', done:'Done', error:'Error'}[st] ?? st;
+  if (st !== 'running') setTimeout(() => { if (!isRunning) { pill.className='pill pill-idle'; pill.textContent='Idle'; }}, 8000);
+}
+
+function checkOverwrite() {
+  document.getElementById('warn-overwrite').style.display = gc('overwrite') ? '' : 'none';
+}
+function checkIncremental() {
+  document.getElementById('warn-incremental').style.display =
+    (gc('incremental_mode') && !gv('output_directory')) ? '' : 'none';
+}
+function onScheduleToggle() {
+  const on = gc('schedule_enabled');
+  const el = document.getElementById('sched-opts');
+  el.style.opacity = on ? '1' : '0.45'; el.style.pointerEvents = on ? '' : 'none';
+}
+function onWatchToggle() {
+  const on = gc('watch_enabled');
+  document.getElementById('watch-opts').style.opacity = on ? '1' : '0.45';
+  document.getElementById('watch-opts').style.pointerEvents = on ? '' : 'none';
+  document.getElementById('watch-info').style.display = on ? '' : 'none';
+}
+function onPresetChange() {
+  const v = document.getElementById('schedule_preset').value;
+  document.getElementById('cron-row').style.display = v === 'custom' ? '' : 'none';
+  if (v !== 'custom') document.getElementById('schedule_cron').value = v;
+}
+function syncPreset(cron) {
+  const presets = ['0 * * * *','0 2 * * *','0 2 * * 0'];
+  const sel = document.getElementById('schedule_preset');
+  sel.value = presets.includes(cron) ? cron : 'custom';
+  document.getElementById('cron-row').style.display = presets.includes(cron) ? 'none' : '';
+  document.getElementById('schedule_cron').value = cron;
+}
+
+let flashT;
+function flash(msg, err=false) {
+  const el = document.getElementById('prog-label');
+  const was = el.textContent;
+  el.textContent = msg; el.style.color = err ? 'var(--red)' : 'var(--green)';
+  clearTimeout(flashT);
+  flashT = setTimeout(() => { el.style.color=''; el.textContent = was; }, 2500);
+}
+
+init();
+</script>
+</body>
+</html>

@@ -1,0 +1,198 @@
+# Live2Motion Photos
+
+A self-hosted web UI for converting iPhone Live Photos into Google / Samsung Motion Photos, so they animate natively in Google Photos on Android.
+
+Built as a browser-based frontend around [MotionPhoto2](https://github.com/PetrVys/MotionPhoto2) by PetrVys, adding a real-time progress dashboard, folder browser, scheduled runs, and file-watcher automation — all accessible from any device on your local network.
+
+---
+
+## Why
+
+When you transfer iPhone Live Photos to Android or a PC, they split into two separate files — a still image (`.HEIC` / `.JPEG`) and a short video clip (`.MOV`). Google Photos on Android does not automatically recognise these as a pair and will not animate them.
+
+Live2Motion wraps MotionPhoto2 to mux each pair into a single Google Motion Photo file (`.LIVE.HEIC` or in-place overwrite), which Google Photos recognises and animates exactly as Apple's Live Photos do on iPhone.
+
+---
+
+## Features
+
+- **Browser UI** — accessible from any device on your local network; no app to install on your phone
+- **Real-time progress** — live terminal output with per-file status, colour-coded warnings and errors
+- **Statistics panel** — donut chart showing Completed / Skipped / Errors / Remaining with live updates
+- **Folder browser** — point-and-click navigation of the server filesystem to select input/output directories
+- **All MotionPhoto2 settings** exposed with hover tooltips explaining each option
+- **Scheduled runs** — built-in cron scheduler with presets (hourly, daily, weekly) or custom cron expressions
+- **File watcher** — monitors the input directory and auto-triggers a run when new media arrives, with configurable debounce delay
+- **Run history** — last 20 runs with trigger type, duration, converted/skipped/error counts, and exit status
+- **Persistent settings** — configuration saved to `config.json` and restored on restart
+- **Systemd service** — runs in the background and starts on boot
+
+---
+
+## Requirements
+
+- Linux (tested on Debian 13)
+- Python 3.9+
+- [ExifTool](https://exiftool.org/) (`sudo apt install libimage-exiftool-perl`)
+- The [MotionPhoto2](https://github.com/PetrVys/MotionPhoto2/releases/latest) Linux binary
+
+---
+
+## Installation
+
+### 1. Install ExifTool
+
+```bash
+sudo apt install libimage-exiftool-perl
+```
+
+### 2. Download the MotionPhoto2 binary
+
+```bash
+wget https://github.com/PetrVys/MotionPhoto2/releases/latest/download/MotionPhoto2_Linux_v2.7.7.zip
+python3 -c "import zipfile; zipfile.ZipFile('MotionPhoto2_Linux_v2.7.7.zip').extractall('motionphoto2-bin')"
+chmod +x motionphoto2-bin/motionphoto2
+```
+
+### 3. Clone and install Live2Motion
+
+```bash
+git clone https://github.com/ramin-azizi/Live2MotionPhotos.git
+cd Live2MotionPhotos
+python3 -m venv venv
+venv/bin/pip install -r requirements.txt
+```
+
+### 4. Configure the binary path
+
+Open `app.py` and set `BIN` to the path of your MotionPhoto2 binary:
+
+```python
+BIN = "/path/to/motionphoto2-bin/motionphoto2"
+```
+
+### 5. Run
+
+```bash
+venv/bin/python app.py
+```
+
+Then open **http://your-server-ip:7000** in a browser.
+
+---
+
+## Running as a systemd service (auto-start on boot)
+
+```bash
+sudo nano /etc/systemd/system/live2motion.service
+```
+
+```ini
+[Unit]
+Description=Live2Motion Photos Web UI
+After=network.target
+
+[Service]
+Type=simple
+User=youruser
+WorkingDirectory=/path/to/Live2MotionPhotos
+ExecStart=/path/to/Live2MotionPhotos/venv/bin/python app.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now live2motion
+```
+
+---
+
+## Usage
+
+### Settings
+
+| Setting | Flag | Description |
+|---|---|---|
+| Input Directory | | Root folder containing your Live Photos |
+| Output Directory | | Where to save results. Leave empty to use Overwrite mode |
+| Recursive | `-r` | Scan all subdirectories |
+| EXIF Match | `-em` | Match pairs by EXIF metadata instead of filename. Recommended for iPhone exports where filenames may not align |
+| Incremental Mode | `-im` | Skip files already converted. Requires an Output Directory |
+| Copy Unmuxed | `-cu` | Copy non-live photos unchanged to the Output Directory |
+| Overwrite Originals | `-o` | Replace source images in place. No Output Directory needed |
+| Delete Video After Mux | `-dv` | Remove the `.MOV` file after embedding it |
+| Keep Temp Files | `-kt` | Retain temporary files for debugging |
+| Skip XMP Metadata | `-nx` | Do not copy XMP tags to the output |
+| Verbose | `-v` | Detailed per-file log output |
+
+### Schedule
+
+Enable **scheduled runs** and choose a preset (hourly / daily 2 AM / weekly Sunday 2 AM) or enter a custom [cron expression](https://crontab.guru/). The next scheduled run time is shown below the selector.
+
+### File Watcher
+
+Enable **auto-run on new files** to monitor the Input Directory for incoming `.HEIC`, `.JPEG`, `.MOV`, or `.MP4` files. After new files stop arriving for the configured **debounce period** (default 300 s), a conversion run is triggered automatically. Set the debounce higher than the time it takes to fully transfer a batch of photos from your iPhone.
+
+---
+
+## Limitations
+
+### HDR in Google Photos
+
+HDR is displayed correctly in Google Photos only for HEIC files with HDR stored in ISO/CD 21496-1 format — effectively requiring **iPhone 15+ shooting on iOS 18+**.
+
+For photos from older devices (iPhone 14 and earlier, iPads, etc.), Google Photos will report the photo as non-HDR after upload. This is not accurate — the Apple HDR gain map is preserved in the file untouched by Live2Motion. If you save the photo back to iPhone Camera Roll, the native Photos app will render it as HDR. Google Photos on iPhone/iPad will also display it correctly, as the iOS app reads Apple's gain map directly, bypassing the server-side HDR flag.
+
+The reason is that Google's server-side pipeline stops checking for HDR metadata once it encounters the GCamera XMP object (which Motion Photos require). This is a known limitation of MotionPhoto2 itself:
+
+> *"It appears that the server-side processing of Google Photos does not check for Apple HDR or ISO HDR once it finds Google Camera header in XMP tags."*
+> — [MotionPhoto2 README](https://github.com/PetrVys/MotionPhoto2/#limitations)
+
+For JPG files a metadata-only fix is theoretically possible (adjusting the JPEG/R HDR fields without re-encoding). For HEIF files, converting Apple's gain map to ISO `tmap` format is non-trivial and not yet implemented in any open-source tool.
+
+**In practice:** for family photo sharing viewed primarily on iPhones, the HDR is fully preserved and visible. The limitation only affects Android displays or Google Photos on the web.
+
+### Skipped file detection
+
+Skip detection parses the MotionPhoto2 log output for keywords (`skip`, `already`, `no matching`). It may undercount in edge cases where the tool silently skips a file without logging a recognisable message.
+
+### Security
+
+The web UI has no authentication and exposes a folder browser for the server filesystem. It is intended for **trusted local network use only**. Do not expose port 7000 to the internet.
+
+---
+
+## Credits
+
+Live2Motion Photos is a web frontend that orchestrates [MotionPhoto2](https://github.com/PetrVys/MotionPhoto2). The actual image/video muxing, EXIF matching, and Motion Photo format implementation are entirely the work of that project and its contributors.
+
+### MotionPhoto2
+
+- **[PetrVys](https://github.com/PetrVys)** — original author and Motion Photo v2/v3 format research
+- **[Tkd-Alex](https://github.com/Tkd-Alex)** — ported the original PowerShell script to Python
+- **[NightMean](https://github.com/NightMean)** — EXIF metadata matching
+- **[sahilph](https://github.com/sahilph)** — copy of non-live photos in directory mode
+- **[tribut](https://github.com/tribut), [4Urban](https://github.com/4Urban), [IamRysing](https://github.com/IamRysing)** — sample Motion Photo contributions
+
+### References
+
+- [Google Motion Photo Format](https://developer.android.com/media/platform/motion-photo-format)
+- [Samsung Motion Photo trailer tags](https://github.com/doodspav/motionphoto) by doodspav
+- [ExifTool](https://exiftool.org/) by Phil Harvey
+
+### Live2Motion web stack
+
+- [FastAPI](https://fastapi.tiangolo.com/) — web framework
+- [APScheduler](https://apscheduler.readthedocs.io/) — cron scheduling
+- [watchdog](https://python-watchdog.readthedocs.io/) — filesystem monitoring
+- [uvicorn](https://www.uvicorn.org/) — ASGI server
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE).
