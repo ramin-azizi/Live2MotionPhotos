@@ -118,7 +118,9 @@ hr{border:none;border-top:1px solid var(--border)}
 .ln-trigger{color:#e3b341;font-weight:600}
 
 /* ── Stats panel ── */
-.stat-panel{width:210px;flex-shrink:0;background:var(--surface);display:flex;flex-direction:column;padding:16px 14px;gap:0;overflow-y:auto}
+.right-col{width:260px;flex-shrink:0;border-left:1px solid var(--border);overflow-y:auto;background:var(--surface);display:flex;flex-direction:column}
+.stat-panel{padding:16px 14px;flex-shrink:0}
+.net-panel{padding:16px 14px;flex-shrink:0;border-top:1px solid var(--border)}
 .sp-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin-bottom:14px}
 
 /* Donut chart */
@@ -407,91 +409,86 @@ tr:hover td{background:var(--surface2)}
         </div>
       </div>
 
-      <!-- Stats panel -->
-      <div class="stat-panel">
-        <div class="sp-title">Statistics</div>
+      <!-- Right column: conversion stats + network stacked -->
+      <div class="right-col">
 
-        <!-- Donut chart -->
-        <div class="donut-wrap">
-          <svg class="donut-svg" viewBox="0 0 42 42" xmlns="http://www.w3.org/2000/svg">
-            <!-- background ring -->
-            <circle cx="21" cy="21" r="15.915" fill="none" stroke="var(--border)" stroke-width="3.5"/>
-            <!-- converted (green) -->
-            <circle id="d-ok"   cx="21" cy="21" r="15.915" fill="none" stroke="var(--green)"  stroke-width="3.5" stroke-dasharray="0 100" stroke-dashoffset="25"/>
-            <!-- skipped (yellow) -->
-            <circle id="d-skip" cx="21" cy="21" r="15.915" fill="none" stroke="var(--yellow)" stroke-width="3.5" stroke-dasharray="0 100" stroke-dashoffset="25"/>
-            <!-- errors (red) -->
-            <circle id="d-err"  cx="21" cy="21" r="15.915" fill="none" stroke="var(--red)"    stroke-width="3.5" stroke-dasharray="0 100" stroke-dashoffset="25"/>
-          </svg>
-          <div class="donut-label">
-            <span class="donut-pct" id="d-pct">0</span>
-            <span class="donut-sub">%</span>
+        <!-- Conversion stats -->
+        <div class="stat-panel">
+          <div class="sp-title">Statistics</div>
+          <div class="donut-wrap">
+            <svg class="donut-svg" viewBox="0 0 42 42" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="21" cy="21" r="15.915" fill="none" stroke="var(--border)" stroke-width="3.5"/>
+              <circle id="d-ok"   cx="21" cy="21" r="15.915" fill="none" stroke="var(--green)"  stroke-width="3.5" stroke-dasharray="0 100" stroke-dashoffset="25"/>
+              <circle id="d-skip" cx="21" cy="21" r="15.915" fill="none" stroke="var(--yellow)" stroke-width="3.5" stroke-dasharray="0 100" stroke-dashoffset="25"/>
+              <circle id="d-err"  cx="21" cy="21" r="15.915" fill="none" stroke="var(--red)"    stroke-width="3.5" stroke-dasharray="0 100" stroke-dashoffset="25"/>
+            </svg>
+            <div class="donut-label">
+              <span class="donut-pct" id="d-pct">0</span>
+              <span class="donut-sub">%</span>
+            </div>
+          </div>
+          <div class="sp-row">
+            <span class="sp-label"><span class="dot" style="background:var(--muted)"></span>Total Pairs</span>
+            <span class="sp-val c-muted" id="sp-total">—</span>
+          </div>
+          <div class="sp-row">
+            <span class="sp-label"><span class="dot" style="background:var(--green)"></span>Completed</span>
+            <span class="sp-val c-green" id="sp-conv">0</span>
+          </div>
+          <div class="sp-row">
+            <span class="sp-label"><span class="dot" style="background:var(--yellow)"></span>Skipped</span>
+            <span class="sp-val c-yellow" id="sp-skip">0</span>
+          </div>
+          <div class="sp-row">
+            <span class="sp-label"><span class="dot" style="background:var(--red)"></span>Errors</span>
+            <span class="sp-val c-red" id="sp-err">0</span>
+          </div>
+          <div class="sp-row">
+            <span class="sp-label"><span class="dot" style="background:var(--blue)"></span>Remaining</span>
+            <span class="sp-val c-blue" id="sp-remain">—</span>
+          </div>
+          <div class="sp-divider"></div>
+          <div class="sp-file" id="sp-file" style="display:none">
+            <strong>Processing:</strong>
+            <span id="sp-file-name"></span>
           </div>
         </div>
 
-        <!-- Stat rows -->
-        <div class="sp-row">
-          <span class="sp-label"><span class="dot" style="background:var(--muted)"></span>Total Pairs</span>
-          <span class="sp-val c-muted" id="sp-total">—</span>
-        </div>
-        <div class="sp-row">
-          <span class="sp-label"><span class="dot" style="background:var(--green)"></span>Completed</span>
-          <span class="sp-val c-green" id="sp-conv">0</span>
-        </div>
-        <div class="sp-row">
-          <span class="sp-label"><span class="dot" style="background:var(--yellow)"></span>Skipped</span>
-          <span class="sp-val c-yellow" id="sp-skip">0</span>
-        </div>
-        <div class="sp-row">
-          <span class="sp-label"><span class="dot" style="background:var(--red)"></span>Errors</span>
-          <span class="sp-val c-red" id="sp-err">0</span>
-        </div>
-        <div class="sp-row">
-          <span class="sp-label"><span class="dot" style="background:var(--blue)"></span>Remaining</span>
-          <span class="sp-val c-blue" id="sp-remain">—</span>
-        </div>
+        <!-- Network panel -->
+        <div class="net-panel">
+          <div class="sp-title">Network <span id="net-iface" style="font-size:9px;color:var(--muted);text-transform:none;letter-spacing:0;font-weight:400"></span></div>
 
-        <div class="sp-divider"></div>
-        <div class="sp-file" id="sp-file" style="display:none">
-          <strong>Processing:</strong>
-          <span id="sp-file-name"></span>
-        </div>
-      </div>
+          <div style="margin-bottom:10px">
+            <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">
+              <span style="color:var(--green)">▼ Download</span>
+              <span style="color:var(--green);font-family:var(--mono);font-weight:700" id="net-rx">—</span>
+            </div>
+            <div style="height:5px;background:var(--border);border-radius:2px;overflow:hidden;margin-bottom:7px">
+              <div id="net-rx-bar" style="height:100%;background:var(--green);width:0;border-radius:2px;transition:width .5s ease"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">
+              <span style="color:var(--blue)">▲ Upload</span>
+              <span style="color:var(--blue);font-family:var(--mono);font-weight:700" id="net-tx">—</span>
+            </div>
+            <div style="height:5px;background:var(--border);border-radius:2px;overflow:hidden">
+              <div id="net-tx-bar" style="height:100%;background:var(--blue);width:0;border-radius:2px;transition:width .5s ease"></div>
+            </div>
+          </div>
 
-      <!-- Network panel -->
-      <div class="stat-panel" style="border-left:1px solid var(--border);width:220px">
-        <div class="sp-title">Network <span style="font-size:9px;color:var(--muted);text-transform:none;letter-spacing:0" id="net-iface"></span></div>
+          <div class="sp-divider"></div>
+          <div class="sp-title" style="margin:8px 0 6px;font-size:9px">Interfaces</div>
+          <div id="net-ifaces" style="display:flex;flex-direction:column;gap:5px;margin-bottom:6px">
+            <div style="color:var(--muted);font-size:11px">Waiting…</div>
+          </div>
 
-        <!-- RX/TX bars -->
-        <div style="margin-bottom:12px">
-          <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">
-            <span style="color:var(--green)">▼ Download</span>
-            <span style="color:var(--green);font-family:var(--mono);font-weight:700" id="net-rx">—</span>
-          </div>
-          <div style="height:5px;background:var(--border);border-radius:2px;overflow:hidden;margin-bottom:8px">
-            <div id="net-rx-bar" style="height:100%;background:var(--green);border-radius:2px;width:0;transition:width .5s ease"></div>
-          </div>
-          <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">
-            <span style="color:var(--blue)">▲ Upload</span>
-            <span style="color:var(--blue);font-family:var(--mono);font-weight:700" id="net-tx">—</span>
-          </div>
-          <div style="height:5px;background:var(--border);border-radius:2px;overflow:hidden">
-            <div id="net-tx-bar" style="height:100%;background:var(--blue);border-radius:2px;width:0;transition:width .5s ease"></div>
+          <div class="sp-divider"></div>
+          <div class="sp-title" style="margin:8px 0 6px;font-size:9px">Per Process</div>
+          <div id="net-procs" style="display:flex;flex-direction:column;gap:6px">
+            <div style="color:var(--muted);font-size:11px">Waiting…</div>
           </div>
         </div>
 
-        <div class="sp-divider"></div>
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin:8px 0 6px">Interfaces</div>
-        <div id="net-ifaces" style="display:flex;flex-direction:column;gap:4px;margin-bottom:8px">
-          <div style="color:var(--muted);font-size:11px">Waiting…</div>
-        </div>
-
-        <div class="sp-divider"></div>
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin:8px 0 6px">Per Process</div>
-        <div id="net-procs" style="display:flex;flex-direction:column;gap:5px">
-          <div style="color:var(--muted);font-size:11px">Waiting for data…</div>
-        </div>
-      </div>
+      </div><!-- /right-col -->
 
     </div>
 
