@@ -2,3 +2,9 @@ fastapi>=0.100.0
 uvicorn>=0.23.0
 apscheduler>=3.10.0
 watchdog>=3.0.0
+
+# MotionPhoto2 (vendored in MotionPhoto2/, run directly as a subprocess by app.py)
+lxml
+PyExifTool
+Gooey
+six

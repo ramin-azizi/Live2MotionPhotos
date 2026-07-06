@@ -4,6 +4,8 @@ A self-hosted web UI for converting iPhone Live Photos into Google / Samsung Mot
 
 Built as a browser-based frontend around [MotionPhoto2](https://github.com/PetrVys/MotionPhoto2) by PetrVys, adding a real-time progress dashboard, folder browser, scheduled runs, and file-watcher automation — all accessible from any device on your local network.
 
+MotionPhoto2's source is vendored in `MotionPhoto2/` (pinned to upstream commit `5848f9b`) and run directly via `python3` — there is no compiled binary to build or download. This repo carries one small patch on top of upstream: a missing paired file (e.g. an image whose video got deleted, or a duplicate `ContentIdentifier` collision) is logged and skipped instead of calling `sys.exit(1)` and killing the whole batch. See `MotionPhoto2/Muxer.py` (`MuxerInputError`) and `MotionPhoto2/motionphoto2.py` (`failed_pairs`) for the diff from upstream.
+
 ---
 
 ## Why
@@ -31,10 +33,9 @@ Live2Motion wraps MotionPhoto2 to mux each pair into a single Google Motion Phot
 
 ## Requirements
 
-- Linux (tested on Debian 13)
+- macOS or Linux (tested on Debian 13 and macOS)
 - Python 3.9+
-- [ExifTool](https://exiftool.org/) (`sudo apt install libimage-exiftool-perl`)
-- The [MotionPhoto2](https://github.com/PetrVys/MotionPhoto2/releases/latest) Linux binary
+- [ExifTool](https://exiftool.org/) (`sudo apt install libimage-exiftool-perl` on Linux, `brew install exiftool` on macOS)
 
 ---
 
@@ -43,41 +44,42 @@ Live2Motion wraps MotionPhoto2 to mux each pair into a single Google Motion Phot
 ### 1. Install ExifTool
 
 ```bash
-sudo apt install libimage-exiftool-perl
+sudo apt install libimage-exiftool-perl   # Linux
+brew install exiftool                     # macOS
 ```
 
-### 2. Download the MotionPhoto2 binary
-
-```bash
-wget https://github.com/PetrVys/MotionPhoto2/releases/latest/download/MotionPhoto2_Linux_v2.7.7.zip
-python3 -c "import zipfile; zipfile.ZipFile('MotionPhoto2_Linux_v2.7.7.zip').extractall('motionphoto2-bin')"
-chmod +x motionphoto2-bin/motionphoto2
-```
-
-### 3. Clone and install Live2Motion
+### 2. Clone and install Live2Motion
 
 ```bash
 git clone https://github.com/ramin-azizi/Live2MotionPhotos.git
 cd Live2MotionPhotos
 python3 -m venv venv
 venv/bin/pip install -r requirements.txt
+cp config.example.json config.json
 ```
 
-### 4. Configure the binary path
+This installs both the web app's dependencies and MotionPhoto2's (the vendored `MotionPhoto2/` folder is run directly as a subprocess — no separate download or build step).
 
-Open `app.py` and set `BIN` to the path of your MotionPhoto2 binary:
-
-```python
-BIN = "/path/to/motionphoto2-bin/motionphoto2"
-```
-
-### 5. Run
+### 3. Run
 
 ```bash
 venv/bin/python app.py
 ```
 
-Then open **http://your-server-ip:7000** in a browser.
+Then open **http://your-server-ip:7000** in a browser (port 7000 may already be taken by macOS Control Center on a Mac — use a different port for local dev, see below).
+
+### Local development on a machine other than the homelab server
+
+You don't need the server or its photo library to work on the FastAPI routes / UI. Run it on any free port:
+
+```bash
+venv/bin/python3 -c "
+import uvicorn, app
+uvicorn.run(app.app, host='127.0.0.1', port=7099)
+"
+```
+
+To point at a different (or fake) photo library, edit `input_directory` in `config.json`. To use a pre-built binary instead of the vendored source (e.g. for speed), set `MOTIONPHOTO2_BIN=/path/to/binary` in the environment before starting.
 
 ---
 

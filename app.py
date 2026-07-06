@@ -6,6 +6,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import threading
 from datetime import datetime
 from pathlib import Path
@@ -21,7 +22,13 @@ from watchdog.observers import Observer
 
 BASE_DIR = Path(__file__).parent
 CONFIG_FILE = BASE_DIR / "config.json"
-BIN = "/home/ramin/motionphoto2-bin/motionphoto2"
+
+# MOTIONPHOTO2_BIN can override with a path to a compiled binary; otherwise
+# always run the vendored source directly (MotionPhoto2/) so bugfixes there
+# take effect without ever needing to build a binary, locally or on the server.
+BIN = [os.environ["MOTIONPHOTO2_BIN"]] if os.environ.get("MOTIONPHOTO2_BIN") else [
+    sys.executable, str(BASE_DIR / "MotionPhoto2" / "motionphoto2.py")
+]
 
 DEFAULT_CONFIG = {
     "input_directory": "/home/ramin/shared",
@@ -56,6 +63,8 @@ class RunState:
         self.lines: list = []
         self.stats: dict = {"total": 0, "current": 0, "converted": 0, "skipped": 0, "errors": 0, "current_file": ""}
         self.history: list = []
+        self.skipped_files: list = []      # full paths of already-muxed photos
+        self.input_dir: str = ""
 
     def start(self, trigger: str) -> bool:
         with self._lock:
@@ -66,6 +75,7 @@ class RunState:
             self.start_time = datetime.now().isoformat()
             self.lines = []
             self.stats = {"total": 0, "current": 0, "converted": 0, "skipped": 0, "errors": 0, "current_file": ""}
+            self.skipped_files = []
             return True
 
     def emit(self, raw: str):
@@ -73,7 +83,6 @@ class RunState:
         line = f"[{ts}] {raw}"
         self.lines.append(line)
         rawl = raw.lower()
-        # Parse progress marker  =====[N/TOTAL]
         if re.match(r"=+\[", raw):
             m = re.search(r"\[(\d+)/(\d+)\]", raw)
             if m:
@@ -83,9 +92,17 @@ class RunState:
             self.stats["converted"] += 1
         elif "[ERROR]" in raw:
             self.stats["errors"] += 1
-        elif "skip" in rawl or ("already" in rawl and "motion" in rawl) or "no matching" in rawl:
+        elif "is already a motion photo, skipping" in rawl:
             self.stats["skipped"] += 1
-        # Track currently processing filename
+            # "Input <rel_path> is already a motion photo, skipping muxing..."
+            m = re.search(r"^Input (.+?) is already a motion photo", raw, re.IGNORECASE)
+            if m and self.input_dir:
+                full = str(Path(self.input_dir) / m.group(1).strip())
+                if full not in self.skipped_files:
+                    self.skipped_files.append(full)
+        elif "no matching video" in rawl or "no matching" in rawl:
+            self.stats["skipped"] += 1
+        # Track currently processing filename for the status display
         if "- Processing " in raw:
             m = re.search(r"- Processing (.+)$", raw)
             if m:
@@ -144,7 +161,7 @@ def save_config(cfg: dict):
 # ─── Run logic ────────────────────────────────────────────────────────────────
 
 def build_cmd(cfg: dict) -> list:
-    cmd = [BIN]
+    cmd = list(BIN)
     if d := cfg.get("input_directory"):
         cmd += ["--input-directory", d]
     if d := cfg.get("output_directory"):
@@ -169,11 +186,12 @@ def do_run(trigger: str = "manual"):
     if not run_state.start(trigger):
         return
     cfg = load_config()
+    run_state.input_dir = cfg.get("input_directory", "")
     cmd = build_cmd(cfg)
     run_state.emit(f"▶ Triggered by: {trigger}")
     run_state.emit("$ " + " ".join(cmd))
-    if not Path(BIN).exists():
-        run_state.emit(f"✗ Binary not found: {BIN}")
+    if not Path(BIN[-1]).exists():
+        run_state.emit(f"✗ MotionPhoto2 entry point not found: {BIN[-1]}")
         run_state.finish(127)
         return
     try:
@@ -390,47 +408,160 @@ def api_browse(path: str = "/home/ramin"):
         return JSONResponse({"error": "Permission denied"}, status_code=403)
 
 
-@app.get("/api/system")
-def api_system():
-    p = Path("/run/system-stats.json")
-    if not p.exists():
-        return JSONResponse({"error": "system-daemon not running"}, status_code=503)
-    try:
-        return json.loads(p.read_text())
-    except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=503)
+VIDEO_EXTS = {".mov", ".mp4"}
+PHOTO_EXTS = {".heic", ".jpg", ".jpeg"}
+MAX_LIVE_PHOTO_SECS = 5.0
 
 
-@app.get("/api/network")
-def api_network():
-    p = Path("/run/network-stats.json")
-    if not p.exists():
-        return JSONResponse({"error": "nethogs-daemon not running"}, status_code=503)
+def _video_duration(path: Path) -> float:
+    """Return video duration in seconds using exiftool, or 999 on error."""
     try:
-        data = json.loads(p.read_text())
-        # Merge Docker net labels if available
+        r = subprocess.run(
+            ["exiftool", "-q", "-Duration#", str(path)],
+            capture_output=True, text=True, timeout=10,
+        )
+        for line in r.stdout.splitlines():
+            if "duration" in line.lower():
+                return float(line.split(":", 1)[-1].strip())
+    except Exception:
+        pass
+    return 999.0
+
+
+def _batch_durations(video_paths: list[str]) -> dict[str, float]:
+    """Return {path: duration_secs} for a list of video files, via one exiftool call."""
+    durations: dict[str, float] = {}
+    if not video_paths:
+        return durations
+    chunk = 500
+    for i in range(0, len(video_paths), chunk):
+        batch = video_paths[i:i + chunk]
         try:
-            docker = json.loads(Path("/run/docker-nets.json").read_text())
-            for iface in data.get("interfaces", []):
-                name = iface["name"]
-                if name in docker:
-                    iface["label"] = docker[name]
+            r = subprocess.run(
+                ["exiftool", "-q", "-p", "$SourceFile\t$Duration#"] + batch,
+                capture_output=True, text=True, timeout=60,
+            )
+            for line in r.stdout.splitlines():
+                parts = line.strip().split("\t", 1)
+                if len(parts) == 2:
+                    try:
+                        durations[parts[0]] = float(parts[1])
+                    except ValueError:
+                        durations[parts[0]] = 999.0
         except Exception:
             pass
-        return data
-    except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=503)
+    return durations
 
 
-@app.get("/api/power")
-def api_power():
-    p = Path("/run/rapl-power")
-    if not p.exists():
-        return JSONResponse({"error": "rapl-daemon not running"}, status_code=503)
-    try:
-        return json.loads(p.read_text())
-    except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=503)
+def _find_video_for_photo(photo: Path):
+    """Return (video_path, size) for first matching video ≤ MAX_LIVE_PHOTO_SECS, or None."""
+    for ext in VIDEO_EXTS:
+        for candidate in [photo.with_suffix(ext), photo.with_suffix(ext.upper())]:
+            if candidate.exists():
+                try:
+                    if _video_duration(candidate) <= MAX_LIVE_PHOTO_SECS:
+                        return candidate, candidate.stat().st_size
+                except OSError:
+                    pass
+    return None, 0
+
+
+@app.get("/api/cleanup-preview")
+def api_cleanup_preview():
+    """Videos paired with photos logged as skipped (already muxed) in the last run."""
+    videos, total_bytes = [], 0
+    for photo_path in run_state.skipped_files:
+        vid, size = _find_video_for_photo(Path(photo_path))
+        if vid:
+            videos.append({"path": str(vid), "name": vid.name, "size": size})
+            total_bytes += size
+    return {"count": len(videos), "total_bytes": total_bytes, "videos": videos,
+            "skipped_photos": len(run_state.skipped_files)}
+
+
+@app.get("/api/cleanup-scan")
+def api_cleanup_scan():
+    """Walk input directory and find video files whose photo is already a motion photo."""
+    cfg = load_config()
+    input_dir = cfg.get("input_directory", "")
+    if not input_dir or not Path(input_dir).is_dir():
+        return JSONResponse({"error": "Input directory not configured or not found"}, status_code=400)
+
+    delete_video_on = cfg.get("delete_video", False)
+
+    # Walk directory, collecting photo-video pairs by matching basename
+    pairs: list[tuple[Path, Path, int]] = []
+    for root, _dirs, files in os.walk(input_dir, followlinks=True):
+        try:
+            vids_by_stem: dict[str, Path] = {}
+            for f in files:
+                fp = Path(root) / f
+                if fp.suffix.lower() in VIDEO_EXTS:
+                    vids_by_stem[fp.stem.lower()] = fp
+            for f in files:
+                fp = Path(root) / f
+                if fp.suffix.lower() in PHOTO_EXTS:
+                    vid = vids_by_stem.get(fp.stem.lower())
+                    if vid:
+                        try:
+                            pairs.append((fp, vid, vid.stat().st_size))
+                        except OSError:
+                            pass
+        except OSError:
+            continue   # skip unreadable/unmounted symlink targets
+
+    if not pairs:
+        return {"count": 0, "total_bytes": 0, "videos": [], "scanned": 0}
+
+    # Filter out any video longer than MAX_LIVE_PHOTO_SECS — those are standalone clips,
+    # not Live Photo components, and must not be deleted regardless of other logic.
+    vid_paths = [str(v) for _, v, _ in pairs]
+    durations = _batch_durations(vid_paths)
+    pairs = [(p, v, sz) for p, v, sz in pairs
+             if durations.get(str(v), 999.0) <= MAX_LIVE_PHOTO_SECS]
+
+    if not pairs:
+        return {"count": 0, "total_bytes": 0, "videos": [], "scanned": 0}
+
+    # Always verify via exiftool that the photo actually has the video embedded
+    # before offering the paired video for deletion — even with delete_video=true,
+    # folders can contain a mix of already-muxed and not-yet-muxed photos.
+    photo_paths = [str(p) for p, _, _ in pairs]
+    muxed: set[str] = set()
+    chunk = 500
+    for i in range(0, len(photo_paths), chunk):
+        try:
+            r = subprocess.run(
+                ["exiftool", "-q", "-m", "-if", "$MotionPhoto",
+                 "-p", "$SourceFile"] + photo_paths[i:i + chunk],
+                capture_output=True, text=True, timeout=60,
+            )
+            muxed.update(l.strip() for l in r.stdout.splitlines() if l.strip())
+        except Exception:
+            pass
+
+    videos, total_bytes = [], 0
+    for photo, vid, sz in pairs:
+        if str(photo) in muxed:
+            videos.append({"path": str(vid), "name": vid.name, "size": sz})
+            total_bytes += sz
+    return {"count": len(videos), "total_bytes": total_bytes, "videos": videos,
+            "scanned": len(pairs)}
+
+
+@app.delete("/api/cleanup")
+async def api_cleanup(request: Request):
+    """Delete a list of video files by path."""
+    body = await request.json()
+    paths = body.get("paths", [])
+    deleted, errors = [], []
+    for path in paths:
+        try:
+            Path(path).unlink()
+            deleted.append(path)
+        except Exception as e:
+            errors.append({"file": path, "error": str(e)})
+    return {"deleted": len(deleted), "errors": errors}
 
 
 if __name__ == "__main__":

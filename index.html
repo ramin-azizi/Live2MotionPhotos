@@ -84,13 +84,24 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 hr{border:none;border-top:1px solid var(--border)}
 .sub-label{font-size:11px;color:var(--muted);margin-top:4px}
 
-/* ── System stats strip ── */
-.sys-bar{background:var(--surface2);border-bottom:1px solid var(--border);padding:6px 16px;display:flex;align-items:center;gap:20px;flex-shrink:0;font-size:12px;flex-wrap:nowrap;overflow:hidden}
-.sys-stat{display:flex;align-items:center;gap:6px;white-space:nowrap}
-.sys-label{color:var(--muted);font-size:11px}
-.sys-val{font-family:var(--mono);font-weight:600}
-.sys-bar-track{width:60px;height:4px;background:var(--border);border-radius:2px;overflow:hidden;flex-shrink:0}
-.sys-bar-fill{height:100%;border-radius:2px;transition:width .5s ease}
+/* ── Cleanup banner ── */
+.cleanup-bar{background:#1a2010;border-bottom:1px solid #3fb950;padding:6px 16px;display:flex;align-items:center;gap:10px;flex-shrink:0;font-size:12px}
+
+/* ── Cleanup modal ── */
+.cu-state{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 20px;gap:12px;color:var(--muted);font-size:13px}
+.cu-spinner{width:28px;height:28px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.cu-results{padding:16px 20px;display:flex;flex-direction:column;gap:14px}
+.cu-summary{background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:12px 14px;display:flex;align-items:center;justify-content:space-between}
+.cu-count{font-size:22px;font-weight:700;font-family:var(--mono);color:var(--text)}
+.cu-size{font-size:12px;color:var(--muted);text-align:right}
+.cu-filelist{max-height:220px;overflow-y:auto;background:var(--bg);border:1px solid var(--border);border-radius:var(--r);font-family:var(--mono);font-size:11px}
+.cu-file{display:flex;align-items:center;gap:8px;padding:5px 10px;border-bottom:1px solid var(--border)}
+.cu-file:last-child{border-bottom:none}
+.cu-file:hover{background:var(--surface2)}
+.cu-file input[type=checkbox]{accent-color:var(--accent);flex-shrink:0;cursor:pointer}
+.cu-file label{flex:1;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}
+.cu-file .cu-fsz{color:var(--muted);font-size:10px;flex-shrink:0}
 
 /* ── Main content ── */
 .main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
@@ -120,7 +131,6 @@ hr{border:none;border-top:1px solid var(--border)}
 /* ── Stats panel ── */
 .right-col{width:260px;flex-shrink:0;border-left:1px solid var(--border);overflow-y:auto;background:var(--surface);display:flex;flex-direction:column}
 .stat-panel{padding:16px 14px;flex-shrink:0}
-.net-panel{padding:16px 14px;flex-shrink:0;border-top:1px solid var(--border)}
 .sp-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin-bottom:14px}
 
 /* Donut chart */
@@ -178,6 +188,57 @@ tr:hover td{background:var(--surface2)}
 <!-- ── Floating tooltip ── -->
 <div id="tooltip"></div>
 
+<!-- ── Cleanup modal ── -->
+<div class="modal-bg" id="cu-bg" style="display:none" onclick="if(event.target===this)closeCu()">
+  <div class="modal" style="width:520px">
+    <div class="modal-hdr">
+      <h3>🗑 Find Orphaned Videos</h3>
+      <button class="modal-close" onclick="closeCu()">✕</button>
+    </div>
+    <!-- idle -->
+    <div id="cu-idle" class="cu-state">
+      <div style="font-size:13px;text-align:center;line-height:1.6;color:var(--text)">
+        Scans the input directory for photos already converted to<br>Motion Photos and finds their original video files.
+      </div>
+      <button class="btn btn-primary" onclick="startScan()" style="margin-top:4px">🔍 Scan Now</button>
+    </div>
+    <!-- scanning -->
+    <div id="cu-scanning" class="cu-state" style="display:none">
+      <div class="cu-spinner"></div>
+      <span>Scanning with exiftool… this may take a minute.</span>
+    </div>
+    <!-- results -->
+    <div id="cu-results" class="cu-results" style="display:none">
+      <div class="cu-summary">
+        <div>
+          <div class="cu-count" id="cu-count">0</div>
+          <div style="font-size:11px;color:var(--muted)">video files found</div>
+        </div>
+        <div class="cu-size">
+          <div id="cu-total-size" style="font-size:16px;font-weight:700;font-family:var(--mono);color:var(--text)"></div>
+          <div id="cu-scanned" style="font-size:11px"></div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
+          <input type="checkbox" id="cu-select-all" checked onchange="toggleAll(this.checked)" style="accent-color:var(--accent)">
+          Select all
+        </label>
+        <span id="cu-sel-count" style="font-size:11px;color:var(--muted);flex:1"></span>
+        <button class="btn btn-sm" onclick="startScan()" style="font-size:11px">↺ Rescan</button>
+      </div>
+      <div class="cu-filelist" id="cu-filelist"></div>
+      <div style="font-size:11px;color:var(--muted)" id="cu-none" style="display:none"></div>
+    </div>
+    <!-- footer -->
+    <div class="modal-footer" id="cu-footer" style="display:none">
+      <span id="cu-err" style="font-size:11px;color:var(--red);flex:1"></span>
+      <button class="btn" onclick="closeCu()">Cancel</button>
+      <button class="btn btn-danger" id="cu-del-btn" onclick="doDeleteSelected()">Delete Selected</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Folder browser modal ── -->
 <div class="modal-bg" id="browser-bg" style="display:none" onclick="if(event.target===this)closeBrowser()">
   <div class="modal">
@@ -201,42 +262,17 @@ tr:hover td{background:var(--surface2)}
   <div class="spacer"></div>
   <span class="pill pill-idle" id="status-pill">Idle</span>
   <span class="pill pill-watch" id="watch-pill" style="display:none">Watching</span>
+  <button class="btn" onclick="openCu()" title="Find and delete video files for already-muxed photos">🗑 Clean Up</button>
   <button class="btn btn-primary" id="run-btn" onclick="startRun()">▶ Run Now</button>
   <button class="btn btn-danger" id="cancel-btn" onclick="cancelRun()" style="display:none">⬛ Cancel</button>
 </header>
 
-<!-- ── System stats strip ── -->
-<div class="sys-bar">
-  <div class="sys-stat">
-    <span class="sys-label">CPU</span>
-    <span class="sys-val" id="sys-cpu">—</span>
-    <div class="sys-bar-track"><div class="sys-bar-fill" id="sys-cpu-bar" style="background:var(--blue)"></div></div>
-  </div>
-  <div class="sys-stat">
-    <span class="sys-label">Freq</span>
-    <span class="sys-val" id="sys-freq" style="color:var(--muted)">—</span>
-  </div>
-  <div class="sys-stat">
-    <span class="sys-label">Temp</span>
-    <span class="sys-val" id="sys-temp">—</span>
-  </div>
-  <div class="sys-stat">
-    <span class="sys-label">RAM</span>
-    <span class="sys-val" id="sys-ram">—</span>
-    <div class="sys-bar-track"><div class="sys-bar-fill" id="sys-ram-bar" style="background:var(--purple)"></div></div>
-  </div>
-  <div class="sys-stat">
-    <span class="sys-label">Package</span>
-    <span class="sys-val" id="sys-pkg">—</span>
-  </div>
-  <div class="sys-stat">
-    <span class="sys-label">Cores</span>
-    <span class="sys-val" id="sys-cores">—</span>
-  </div>
-  <div class="sys-stat" style="flex:1;justify-content:flex-end">
-    <div class="sys-bar-track" style="width:80px"><div class="sys-bar-fill" id="sys-pwr-bar" style="background:var(--green)"></div></div>
-    <span class="sys-label" id="sys-tdp-lbl" style="font-size:10px"></span>
-  </div>
+<!-- ── Cleanup notice (shown after a run when orphaned videos are found) ── -->
+<div class="cleanup-bar" id="cleanup-bar" style="display:none">
+  <span style="color:var(--green)">🗑</span>
+  <span id="cleanup-msg" style="flex:1;color:var(--text)"></span>
+  <button class="btn btn-sm btn-primary" onclick="openCu()">Review & Delete</button>
+  <button class="btn-ghost btn-sm" onclick="document.getElementById('cleanup-bar').style.display='none'" style="font-size:16px;padding:0 6px">×</button>
 </div>
 
 <div class="body">
@@ -454,40 +490,6 @@ tr:hover td{background:var(--surface2)}
           </div>
         </div>
 
-        <!-- Network panel -->
-        <div class="net-panel">
-          <div class="sp-title">Network <span id="net-iface" style="font-size:9px;color:var(--muted);text-transform:none;letter-spacing:0;font-weight:400"></span></div>
-
-          <div style="margin-bottom:10px">
-            <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">
-              <span style="color:var(--green)">▼ Download</span>
-              <span style="color:var(--green);font-family:var(--mono);font-weight:700" id="net-rx">—</span>
-            </div>
-            <div style="height:5px;background:var(--border);border-radius:2px;overflow:hidden;margin-bottom:7px">
-              <div id="net-rx-bar" style="height:100%;background:var(--green);width:0;border-radius:2px;transition:width .5s ease"></div>
-            </div>
-            <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">
-              <span style="color:var(--blue)">▲ Upload</span>
-              <span style="color:var(--blue);font-family:var(--mono);font-weight:700" id="net-tx">—</span>
-            </div>
-            <div style="height:5px;background:var(--border);border-radius:2px;overflow:hidden">
-              <div id="net-tx-bar" style="height:100%;background:var(--blue);width:0;border-radius:2px;transition:width .5s ease"></div>
-            </div>
-          </div>
-
-          <div class="sp-divider"></div>
-          <div class="sp-title" style="margin:8px 0 6px;font-size:9px">Interfaces</div>
-          <div id="net-ifaces" style="display:flex;flex-direction:column;gap:5px;margin-bottom:6px">
-            <div style="color:var(--muted);font-size:11px">Waiting…</div>
-          </div>
-
-          <div class="sp-divider"></div>
-          <div class="sp-title" style="margin:8px 0 6px;font-size:9px">Per Process</div>
-          <div id="net-procs" style="display:flex;flex-direction:column;gap:6px">
-            <div style="color:var(--muted);font-size:11px">Waiting…</div>
-          </div>
-        </div>
-
       </div><!-- /right-col -->
 
     </div>
@@ -629,6 +631,7 @@ function connectSSE(fromLine) {
       setRunning(false);
       setStatus(d.stats?.errors > 0 ? 'error' : 'done');
       document.getElementById('sp-file').style.display = 'none';
+      if (d.stats?.skipped > 0) checkCleanup();
       return;
     }
     if (d.line != null) { appendLine(d.line); updateStats(d.stats); }
@@ -810,125 +813,144 @@ function flash(msg, err=false) {
 }
 
 init();
-pollNetwork();  setInterval(pollNetwork, 2500);
-pollSystem();   setInterval(pollSystem, 2000);
 
-async function pollNetwork() {
-  const r = await fetch('/api/network').catch(() => null);
+// ── Cleanup modal ─────────────────────────────────────────────────────────────
+let cuVideos = [];
+
+function openCu() {
+  document.getElementById('cu-bg').style.display = 'flex';
+  if (cuVideos.length > 0) {
+    // Already have results (pre-loaded from run) — show them immediately
+    document.getElementById('cu-idle').style.display = 'none';
+    document.getElementById('cu-scanning').style.display = 'none';
+  } else {
+    document.getElementById('cu-idle').style.display = 'flex';
+    document.getElementById('cu-scanning').style.display = 'none';
+    document.getElementById('cu-results').style.display = 'none';
+    document.getElementById('cu-footer').style.display = 'none';
+  }
+}
+function closeCu() { document.getElementById('cu-bg').style.display = 'none'; }
+
+function _renderCuResults(d) {
+  cuVideos = d.videos ?? [];
+  document.getElementById('cu-count').textContent = d.count;
+  document.getElementById('cu-total-size').textContent = fmtBytes(d.total_bytes ?? 0);
+  const src = d.skipped_photos != null ? `from ${d.skipped_photos} skipped photos` : `from ${d.scanned ?? 0} photo-video pairs`;
+  document.getElementById('cu-scanned').textContent = src;
+  document.getElementById('cu-err').textContent = '';
+  document.getElementById('cu-del-btn').style.display = cuVideos.length ? '' : 'none';
+  document.getElementById('cu-del-btn').disabled = false;
+  document.getElementById('cu-del-btn').textContent = 'Delete Selected';
+  if (cuVideos.length === 0) {
+    document.getElementById('cu-filelist').innerHTML =
+      '<div style="padding:16px;color:var(--muted);text-align:center;font-size:12px">No orphaned videos found — all clean!</div>';
+  } else {
+    document.getElementById('cu-filelist').innerHTML = cuVideos.map((v, i) => `
+      <div class="cu-file">
+        <input type="checkbox" id="cu-f${i}" checked onchange="updateSelCount()">
+        <label for="cu-f${i}" title="${v.path}">${v.name}</label>
+        <span class="cu-fsz">${fmtBytes(v.size)}</span>
+      </div>`).join('');
+    document.getElementById('cu-select-all').checked = true;
+    updateSelCount();
+  }
+  document.getElementById('cu-idle').style.display = 'none';
+  document.getElementById('cu-scanning').style.display = 'none';
+  document.getElementById('cu-results').style.display = 'flex';
+  document.getElementById('cu-footer').style.display = 'flex';
+}
+
+async function startScan() {
+  document.getElementById('cu-idle').style.display = 'none';
+  document.getElementById('cu-results').style.display = 'none';
+  document.getElementById('cu-footer').style.display = 'none';
+  document.getElementById('cu-scanning').style.display = 'flex';
+
+  const r = await fetch('/api/cleanup-scan').catch(() => null);
+  document.getElementById('cu-scanning').style.display = 'none';
+
+  if (!r || !r.ok) {
+    const e = await r?.json().catch(() => ({}));
+    document.getElementById('cu-idle').style.display = 'flex';
+    document.getElementById('cu-err').textContent = e?.error ?? 'Scan failed';
+    document.getElementById('cu-footer').style.display = 'flex';
+    document.getElementById('cu-del-btn').style.display = 'none';
+    return;
+  }
+  _renderCuResults(await r.json());
+}
+
+async function checkCleanup() {
+  const r = await fetch('/api/cleanup-preview').catch(() => null);
   if (!r || !r.ok) return;
   const d = await r.json().catch(() => null);
-  if (!d || d.error) return;
-
-  const LINK_MBPS = 1000;
-  const rx = d.rx_mbps ?? 0, tx = d.tx_mbps ?? 0;
-
-  document.getElementById('net-iface').textContent = d.iface ?? '';
-  document.getElementById('net-rx').textContent = fmtMbps(rx);
-  document.getElementById('net-tx').textContent = fmtMbps(tx);
-  document.getElementById('net-rx-bar').style.width = Math.min(100, rx / LINK_MBPS * 100) + '%';
-  document.getElementById('net-tx-bar').style.width = Math.min(100, tx / LINK_MBPS * 100) + '%';
-
-  // Interfaces
-  const allIfaces = d.interfaces ?? [];
-  const maxIfMbps = allIfaces.length ? Math.max(...allIfaces.map(i => i.rx_mbps + i.tx_mbps), 0.1) : 0.1;
-  document.getElementById('net-ifaces').innerHTML = allIfaces.length
-    ? allIfaces.map(i => {
-        const total = i.rx_mbps + i.tx_mbps;
-        const barW = Math.round(total / maxIfMbps * 100);
-        const lbl = i.label !== i.name ? `<span style="color:var(--yellow)">${i.label}</span>` : `<span style="color:var(--muted)">${i.name}</span>`;
-        return `<div>
-          <div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:2px">
-            ${lbl}
-            <span style="font-family:var(--mono);font-size:10px;white-space:nowrap;margin-left:4px">
-              <span style="color:var(--blue)">▲${fmtMbps(i.tx_mbps)}</span> <span style="color:var(--green)">▼${fmtMbps(i.rx_mbps)}</span>
-            </span>
-          </div>
-          <div style="height:2px;background:var(--border);border-radius:1px;overflow:hidden;margin-bottom:4px">
-            <div style="height:100%;width:${barW}%;background:var(--accent);border-radius:1px;transition:width .5s ease"></div>
-          </div>
-        </div>`;
-      }).join('')
-    : '<div style="color:var(--muted);font-size:11px">No traffic</div>';
-
-  // Processes
-  const PROC_LABELS = {
-    'smbd': 'Samba', 'smbd_client': 'Samba',
-    'qbittorrent': 'qBittorrent', 'qbittorrent-nox': 'qBittorrent',
-    'Plex Media Server': 'Plex', 'Plex Media Scanner': 'Plex Scanner',
-    'python3': 'Web UI (py3)', 'python': 'Web UI (py)',
-    'sshd': 'SSH', 'sshd-session': 'SSH session',
-    'unknown TCP': 'Other TCP', 'unknown UDP': 'Other UDP',
-  };
-  const procs = d.processes ?? [];
-  const maxKbps = procs.length ? Math.max(...procs.map(p => p.sent_kbps + p.recv_kbps), 0.1) : 0.1;
-  document.getElementById('net-procs').innerHTML = procs.length
-    ? procs.map(p => {
-        const total = p.sent_kbps + p.recv_kbps;
-        const barW = Math.round(total / maxKbps * 100);
-        const label = PROC_LABELS[p.name] ?? p.name;
-        return `<div>
-          <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px">
-            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100px" title="${p.name} (pid ${p.pid})">${label}</span>
-            <span style="font-family:var(--mono);font-size:10px;white-space:nowrap;margin-left:4px">
-              <span style="color:var(--blue)">▲${fmtKbps(p.sent_kbps)}</span> <span style="color:var(--green)">▼${fmtKbps(p.recv_kbps)}</span>
-            </span>
-          </div>
-          <div style="height:3px;background:var(--border);border-radius:1px;overflow:hidden">
-            <div style="height:100%;width:${barW}%;background:var(--purple);border-radius:1px;transition:width .5s ease"></div>
-          </div>
-        </div>`;
-      }).join('')
-    : '<div style="color:var(--muted);font-size:11px">No active traffic</div>';
+  if (!d || d.count === 0) return;
+  document.getElementById('cleanup-msg').textContent =
+    `${d.count} video file${d.count !== 1 ? 's' : ''} (${fmtBytes(d.total_bytes)}) can be deleted — already embedded in muxed photos.`;
+  document.getElementById('cleanup-bar').style.display = 'flex';
+  _renderCuResults(d);  // pre-load modal so clicking "Review" is instant
 }
 
-async function pollSystem() {
-  const r = await fetch('/api/system').catch(() => null);
-  if (!r || !r.ok) return;
-  const d = await r.json().catch(() => null);
-  if (!d || d.error) return;
-
-  const cpu = d.cpu_pct ?? 0;
-  const temp = d.temp_c ?? 0;
-  const ramPct = d.ram_pct ?? 0;
-  const pkg = d.power?.package ?? 0;
-  const core = d.power?.core ?? 0;
-  const tdp = d.power?.tdp_w ?? 10;
-  const pwrPct = Math.min(100, pkg / tdp * 100);
-
-  const tempColor = temp >= 90 ? 'var(--red)' : temp >= 75 ? 'var(--yellow)' : 'var(--green)';
-  const cpuColor  = cpu  >= 85 ? 'var(--red)' : cpu  >= 60 ? 'var(--yellow)' : 'var(--blue)';
-  const pwrColor  = pwrPct >= 90 ? 'var(--red)' : pwrPct >= 60 ? 'var(--yellow)' : 'var(--green)';
-
-  document.getElementById('sys-cpu').textContent = cpu.toFixed(0) + '%';
-  document.getElementById('sys-cpu').style.color = cpuColor;
-  document.getElementById('sys-cpu-bar').style.width = cpu + '%';
-  document.getElementById('sys-cpu-bar').style.background = cpuColor;
-
-  document.getElementById('sys-freq').textContent = d.cpu_freq_mhz ? (d.cpu_freq_mhz / 1000).toFixed(2) + ' GHz' : '—';
-
-  document.getElementById('sys-temp').textContent = temp ? temp + '°C' : '—';
-  document.getElementById('sys-temp').style.color = tempColor;
-
-  document.getElementById('sys-ram').textContent = `${d.ram_used_gb}/${d.ram_total_gb} GB`;
-  document.getElementById('sys-ram-bar').style.width = ramPct + '%';
-
-  document.getElementById('sys-pkg').textContent  = pkg  ? pkg.toFixed(1)  + ' W' : '—';
-  document.getElementById('sys-cores').textContent = core ? core.toFixed(1) + ' W' : '—';
-  document.getElementById('sys-pkg').style.color   = pwrColor;
-
-  document.getElementById('sys-pwr-bar').style.width = pwrPct + '%';
-  document.getElementById('sys-pwr-bar').style.background = pwrColor;
-  document.getElementById('sys-tdp-lbl').textContent = `/ ${tdp}W TDP`;
+function toggleAll(checked) {
+  cuVideos.forEach((_, i) => {
+    const el = document.getElementById('cu-f' + i);
+    if (el) el.checked = checked;
+  });
+  updateSelCount();
 }
 
-function fmtMbps(mbps) {
-  if (mbps < 1) return (mbps * 1000).toFixed(0) + 'K';
-  return mbps.toFixed(1) + 'M';
+function updateSelCount() {
+  const sel = cuVideos.filter((_, i) => document.getElementById('cu-f' + i)?.checked).length;
+  document.getElementById('cu-sel-count').textContent = `${sel} of ${cuVideos.length} selected`;
+  document.getElementById('cu-select-all').checked = sel === cuVideos.length;
+  document.getElementById('cu-select-all').indeterminate = sel > 0 && sel < cuVideos.length;
+  document.getElementById('cu-del-btn').disabled = sel === 0;
 }
-function fmtKbps(kbps) {
-  if (kbps >= 1000) return (kbps / 1000).toFixed(1) + 'M';
-  if (kbps >= 1)    return kbps.toFixed(0) + 'K';
-  return '0';
+
+async function doDeleteSelected() {
+  const paths = cuVideos.filter((_, i) => document.getElementById('cu-f' + i)?.checked).map(v => v.path);
+  if (!paths.length) return;
+
+  const btn = document.getElementById('cu-del-btn');
+  btn.disabled = true; btn.textContent = `Deleting ${paths.length}…`;
+
+  const r = await fetch('/api/cleanup', {
+    method: 'DELETE',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({paths}),
+  }).catch(() => null);
+
+  const d = await r?.json().catch(() => null);
+  if (d?.deleted > 0) {
+    const deleted = new Set(paths.slice(0, d.deleted));
+    cuVideos = cuVideos.filter(v => !deleted.has(v.path));
+    document.getElementById('cu-count').textContent = cuVideos.length;
+    if (cuVideos.length === 0) {
+      document.getElementById('cu-filelist').innerHTML =
+        '<div style="padding:16px;color:var(--green);text-align:center;font-size:12px">✓ All done — no orphaned videos remaining.</div>';
+      btn.style.display = 'none';
+    } else {
+      document.getElementById('cu-filelist').innerHTML = cuVideos.map((v, i) => `
+        <div class="cu-file">
+          <input type="checkbox" id="cu-f${i}" checked onchange="updateSelCount()">
+          <label for="cu-f${i}" title="${v.path}">${v.name}</label>
+          <span class="cu-fsz">${fmtBytes(v.size)}</span>
+        </div>`).join('');
+      btn.disabled = false; btn.textContent = 'Delete Selected';
+      updateSelCount();
+    }
+  } else {
+    document.getElementById('cu-err').textContent = d?.errors?.[0]?.error ?? 'Delete failed';
+    btn.disabled = false; btn.textContent = 'Delete Selected';
+  }
+}
+
+function fmtBytes(b) {
+  if (b >= 1e9) return (b / 1e9).toFixed(2) + ' GB';
+  if (b >= 1e6) return (b / 1e6).toFixed(1) + ' MB';
+  if (b >= 1e3) return (b / 1e3).toFixed(0) + ' KB';
+  return b + ' B';
 }
 </script>
 </body>
