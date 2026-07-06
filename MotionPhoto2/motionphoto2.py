@@ -12,7 +12,32 @@ import shutil
 import sys
 
 from pathlib import Path
-from gooey import GooeyParser
+
+try:
+    # Gooey pulls in wxPython, which has no prebuilt wheel on some platforms
+    # (e.g. this project's homelab server) and is only needed for the GUI mode
+    # triggered by running with zero CLI args. Fall back to a plain
+    # ArgumentParser that ignores GUI-only kwargs for headless/CLI use.
+    from gooey import GooeyParser
+except ImportError:
+    def _strip_gooey_kwargs(kwargs):
+        # metavar is repurposed by Gooey as a friendly field label; plain
+        # argparse (Python 3.14+) rejects it for store_true/store_false actions.
+        kwargs.pop("widget", None)
+        kwargs.pop("gooey_options", None)
+        if kwargs.get("action") in ("store_true", "store_false"):
+            kwargs.pop("metavar", None)
+        return kwargs
+
+    class GooeyParser(argparse.ArgumentParser):
+        def add_argument(self, *args, **kwargs):
+            return super().add_argument(*args, **_strip_gooey_kwargs(kwargs))
+
+        def add_argument_group(self, title=None, description=None, gooey_options=None, **kwargs):
+            group = super().add_argument_group(title, description, **kwargs)
+            orig_add_argument = group.add_argument
+            group.add_argument = lambda *a, **kw: orig_add_argument(*a, **_strip_gooey_kwargs(kw))
+            return group
 
 from Muxer import Muxer, MuxerInputError
 from utils import is_motion_photo, extract_video_from_image, input_output_binary_compare, load_defaults, save_defaults
@@ -523,7 +548,11 @@ def main():
 
 if __name__ == "__main__":
     if len(sys.argv) == 1:
-        from gooey import Gooey
+        try:
+            from gooey import Gooey
+        except ImportError:
+            print("[ERROR] GUI mode requires the 'gooey' package (not installed). Pass CLI arguments instead, e.g. --input-directory.")
+            sys.exit(1)
         main = Gooey(program_name='MotionPhoto2',
                      default_size=(1100, 820),
                      progress_regex=r"^=+\[(\d+)/(\d+)]$",

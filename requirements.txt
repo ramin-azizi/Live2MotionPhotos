@@ -4,7 +4,9 @@ apscheduler>=3.10.0
 watchdog>=3.0.0
 
 # MotionPhoto2 (vendored in MotionPhoto2/, run directly as a subprocess by app.py)
+# Gooey is intentionally omitted: it pulls in wxPython (no prebuilt wheel on
+# some platforms) and is only needed for MotionPhoto2's standalone GUI mode,
+# which this project never invokes (app.py always passes CLI args).
 lxml
 PyExifTool
-Gooey
 six
