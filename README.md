@@ -73,6 +73,17 @@ Open **http://your-machine-ip:7000**. To update after pulling new code: `docker 
 
 ### Option B: Native (Linux / macOS / Windows)
 
+**Easiest — for running on your own computer:** get the code, either with `git clone https://github.com/ramin-azizi/Live2MotionPhotos.git`, or via GitHub's **Code → Download ZIP** button (no `git` required) — then just double-click:
+
+- **`Start Live2Motion.command`** (macOS)
+- **`Start Live2Motion.bat`** (Windows)
+- **`start-live2motion.sh`** (Linux)
+
+That's the whole install. First run creates the Python virtual environment, installs dependencies, creates `config.json`, and tries to install ExifTool automatically if it's missing (Homebrew on macOS, apt/dnf on Linux, winget on Windows) — then opens the app in your browser. Every run after that just starts the server and reopens the browser tab. Requires Python 3.9+ to already be installed ([python.org/downloads](https://www.python.org/downloads/)) — the script checks for it and tells you if it's missing. If ExifTool can't be auto-installed on your system, the script prints the exact manual steps.
+
+<details>
+<summary><b>Manual setup</b> (for a headless server, or if you'd rather control each step yourself)</summary>
+
 #### 1. Install ExifTool
 
 ```bash
@@ -101,7 +112,7 @@ venv/bin/python app.py      # Windows: venv\Scripts\python app.py
 
 Then open **http://your-server-ip:7000** in a browser (port 7000 may already be taken by macOS Control Center on a Mac — use a different port for local dev, see below).
 
-**Running locally on your own computer?** After the one-time setup above, you don't need a terminal again — double-click **`Start Live2Motion.command`** (macOS), **`Start Live2Motion.bat`** (Windows), or run **`./start-live2motion.sh`** (Linux) to start the server and open it in your browser automatically. Closing that window stops the server.
+</details>
 
 ### Local development on a machine other than the homelab server
 
