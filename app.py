@@ -413,19 +413,26 @@ PHOTO_EXTS = {".heic", ".jpg", ".jpeg"}
 MAX_LIVE_PHOTO_SECS = 5.0
 
 
-def _video_duration(path: Path) -> float:
-    """Return video duration in seconds using exiftool, or 999 on error."""
-    try:
-        r = subprocess.run(
-            ["exiftool", "-q", "-Duration#", str(path)],
-            capture_output=True, text=True, timeout=10,
-        )
-        for line in r.stdout.splitlines():
-            if "duration" in line.lower():
-                return float(line.split(":", 1)[-1].strip())
-    except Exception:
-        pass
-    return 999.0
+def _batch_tag(paths: list[str], tag: str) -> dict[str, str]:
+    """Return {path: tag_value} for a list of files, via one exiftool call."""
+    values: dict[str, str] = {}
+    if not paths:
+        return values
+    chunk = 500
+    for i in range(0, len(paths), chunk):
+        batch = paths[i:i + chunk]
+        try:
+            r = subprocess.run(
+                ["exiftool", "-q", "-p", f"$SourceFile\t${tag}"] + batch,
+                capture_output=True, text=True, timeout=60,
+            )
+            for line in r.stdout.splitlines():
+                parts = line.split("\t", 1)
+                if len(parts) == 2 and parts[1].strip():
+                    values[parts[0]] = parts[1].strip()
+        except Exception:
+            pass
+    return values
 
 
 def _batch_durations(video_paths: list[str]) -> dict[str, float]:
@@ -453,80 +460,57 @@ def _batch_durations(video_paths: list[str]) -> dict[str, float]:
     return durations
 
 
-def _find_video_for_photo(photo: Path):
-    """Return (video_path, size) for first matching video ≤ MAX_LIVE_PHOTO_SECS, or None."""
-    for ext in VIDEO_EXTS:
-        for candidate in [photo.with_suffix(ext), photo.with_suffix(ext.upper())]:
-            if candidate.exists():
-                try:
-                    if _video_duration(candidate) <= MAX_LIVE_PHOTO_SECS:
-                        return candidate, candidate.stat().st_size
-                except OSError:
-                    pass
-    return None, 0
-
-
-@app.get("/api/cleanup-preview")
-def api_cleanup_preview():
-    """Videos paired with photos logged as skipped (already muxed) in the last run."""
-    videos, total_bytes = [], 0
-    for photo_path in run_state.skipped_files:
-        vid, size = _find_video_for_photo(Path(photo_path))
-        if vid:
-            videos.append({"path": str(vid), "name": vid.name, "size": size})
-            total_bytes += size
-    return {"count": len(videos), "total_bytes": total_bytes, "videos": videos,
-            "skipped_photos": len(run_state.skipped_files)}
-
-
-@app.get("/api/cleanup-scan")
-def api_cleanup_scan():
-    """Walk input directory and find video files whose photo is already a motion photo."""
-    cfg = load_config()
-    input_dir = cfg.get("input_directory", "")
-    if not input_dir or not Path(input_dir).is_dir():
-        return JSONResponse({"error": "Input directory not configured or not found"}, status_code=400)
-
-    delete_video_on = cfg.get("delete_video", False)
-
-    # Walk directory, collecting photo-video pairs by matching basename
-    pairs: list[tuple[Path, Path, int]] = []
+def _walk_media(input_dir: str) -> tuple[list[str], list[str]]:
+    """Recursively collect (photo_paths, video_paths) under input_dir, any subfolder."""
+    photo_paths, video_paths = [], []
     for root, _dirs, files in os.walk(input_dir, followlinks=True):
         try:
-            vids_by_stem: dict[str, Path] = {}
             for f in files:
                 fp = Path(root) / f
-                if fp.suffix.lower() in VIDEO_EXTS:
-                    vids_by_stem[fp.stem.lower()] = fp
-            for f in files:
-                fp = Path(root) / f
-                if fp.suffix.lower() in PHOTO_EXTS:
-                    vid = vids_by_stem.get(fp.stem.lower())
-                    if vid:
-                        try:
-                            pairs.append((fp, vid, vid.stat().st_size))
-                        except OSError:
-                            pass
+                suf = fp.suffix.lower()
+                if suf in VIDEO_EXTS:
+                    video_paths.append(str(fp))
+                elif suf in PHOTO_EXTS:
+                    photo_paths.append(str(fp))
         except OSError:
             continue   # skip unreadable/unmounted symlink targets
+    return photo_paths, video_paths
 
+
+def _pair_by_content_id(photo_paths: list[str], video_paths: list[str]) -> list[tuple[str, str]]:
+    """Pair photos to videos by Apple's ContentIdentifier tag — the same identifier
+    MotionPhoto2's --exif-match mode uses (motionphoto2.py's content_id_to_video map),
+    so folder location and filename never matter, only the id embedded in both files."""
+    photo_ids = _batch_tag(photo_paths, "MakerNotes:ContentIdentifier")
+    video_ids = _batch_tag(video_paths, "QuickTime:ContentIdentifier")
+
+    id_to_video: dict[str, str] = {}
+    for path, cid in video_ids.items():
+        id_to_video.setdefault(cid, path)
+
+    return [(photo, id_to_video[cid]) for photo, cid in photo_ids.items() if cid in id_to_video]
+
+
+def _filter_deletable(pairs: list[tuple[str, str]]) -> tuple[list[dict], int]:
+    """Given (photo, video) pairs matched by ContentIdentifier, keep only those where
+    the video is short enough to be a Live Photo clip AND the photo is confirmed (via
+    exiftool) to already have the video embedded — only then is the standalone video
+    truly redundant and safe to offer for deletion."""
     if not pairs:
-        return {"count": 0, "total_bytes": 0, "videos": [], "scanned": 0}
+        return [], 0
 
-    # Filter out any video longer than MAX_LIVE_PHOTO_SECS — those are standalone clips,
-    # not Live Photo components, and must not be deleted regardless of other logic.
-    vid_paths = [str(v) for _, v, _ in pairs]
+    # Standalone clips longer than a Live Photo must never be offered for deletion,
+    # even if they coincidentally share a ContentIdentifier lookup.
+    vid_paths = list({v for _, v in pairs})
     durations = _batch_durations(vid_paths)
-    pairs = [(p, v, sz) for p, v, sz in pairs
-             if durations.get(str(v), 999.0) <= MAX_LIVE_PHOTO_SECS]
-
+    pairs = [(p, v) for p, v in pairs if durations.get(v, 999.0) <= MAX_LIVE_PHOTO_SECS]
     if not pairs:
-        return {"count": 0, "total_bytes": 0, "videos": [], "scanned": 0}
+        return [], 0
 
     # Always verify via exiftool that the photo actually has the video embedded
-    # before offering the paired video for deletion — even with delete_video=true,
-    # folders can contain a mix of already-muxed and not-yet-muxed photos.
-    photo_paths = [str(p) for p, _, _ in pairs]
+    # before offering the paired video for deletion — a ContentIdentifier match alone
+    # doesn't guarantee the mux has actually happened yet.
+    photo_paths = list({p for p, _ in pairs})
     muxed: set[str] = set()
     chunk = 500
     for i in range(0, len(photo_paths), chunk):
@@ -540,11 +524,51 @@ def api_cleanup_scan():
         except Exception:
             pass
 
-    videos, total_bytes = [], 0
-    for photo, vid, sz in pairs:
-        if str(photo) in muxed:
-            videos.append({"path": str(vid), "name": vid.name, "size": sz})
-            total_bytes += sz
+    videos, total_bytes, seen = [], 0, set()
+    for photo, vid in pairs:
+        if photo in muxed and vid not in seen:
+            seen.add(vid)
+            try:
+                size = Path(vid).stat().st_size
+            except OSError:
+                continue
+            videos.append({"path": vid, "name": Path(vid).name, "size": size})
+            total_bytes += size
+    return videos, total_bytes
+
+
+@app.get("/api/cleanup-preview")
+def api_cleanup_preview():
+    """Videos paired (by ContentIdentifier) with photos logged as skipped (already
+    muxed) in the last run. Searches the whole input directory tree, not just the
+    photo's own folder, since the true pair can live in any subfolder."""
+    photos = run_state.skipped_files
+    if not photos or not run_state.input_dir or not Path(run_state.input_dir).is_dir():
+        return {"count": 0, "total_bytes": 0, "videos": [], "skipped_photos": len(photos)}
+
+    _, video_paths = _walk_media(run_state.input_dir)
+    pairs = _pair_by_content_id(photos, video_paths)
+    videos, total_bytes = _filter_deletable(pairs)
+    return {"count": len(videos), "total_bytes": total_bytes, "videos": videos,
+            "skipped_photos": len(photos)}
+
+
+@app.get("/api/cleanup-scan")
+def api_cleanup_scan():
+    """Walk the whole input directory tree and find video files whose ContentIdentifier
+    matches a photo that's already a motion photo — mirroring exactly how MotionPhoto2's
+    --exif-match mode pairs files, so folder location and filename never matter."""
+    cfg = load_config()
+    input_dir = cfg.get("input_directory", "")
+    if not input_dir or not Path(input_dir).is_dir():
+        return JSONResponse({"error": "Input directory not configured or not found"}, status_code=400)
+
+    photo_paths, video_paths = _walk_media(input_dir)
+    if not photo_paths or not video_paths:
+        return {"count": 0, "total_bytes": 0, "videos": [], "scanned": 0}
+
+    pairs = _pair_by_content_id(photo_paths, video_paths)
+    videos, total_bytes = _filter_deletable(pairs)
     return {"count": len(videos), "total_bytes": total_bytes, "videos": videos,
             "scanned": len(pairs)}
 
