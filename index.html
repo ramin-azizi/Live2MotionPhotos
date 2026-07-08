@@ -524,12 +524,14 @@ function moveTip(e) {
 }
 
 // ── Folder browser ────────────────────────────────────────────────────────────
-let browserTarget = null, browserPath = '/home/ramin';
+// Server tells us its path separator ("/" or "\") via r.sep, since the app may be
+// browsing a POSIX filesystem (Linux/macOS/container) or a Windows one natively.
+let browserTarget = null, browserPath = '';
 
 function openBrowser(target) {
   browserTarget = target;
   document.getElementById('browser-bg').style.display = 'flex';
-  browseTo(document.getElementById(target).value || '/home/ramin');
+  browseTo(document.getElementById(target).value || '');
 }
 function closeBrowser() { document.getElementById('browser-bg').style.display = 'none'; }
 function selectFolder() {
@@ -537,22 +539,38 @@ function selectFolder() {
   closeBrowser();
   checkIncremental();
 }
+function joinPath(base, name, sep) {
+  return base.endsWith(sep) ? base + name : base + sep + name;
+}
+function renderCrumb(path, sep) {
+  if (sep === '\\') {
+    // Windows: "C:\Users\ramin\Photos" -> root "C:\" is not splittable further
+    const m = path.match(/^([A-Za-z]:\\)(.*)$/);
+    if (!m) return esc(path);
+    const [, root, rest] = m;
+    let acc = root;
+    let html = `<span onclick="browseTo('${esc(root)}')">${esc(root)}</span>`;
+    rest.split('\\').filter(Boolean).forEach(p => {
+      acc = joinPath(acc, p, sep);
+      html += ` <span onclick="browseTo('${esc(acc)}')">${p}</span> \\`;
+    });
+    return html;
+  }
+  const parts = path.split('/').filter(Boolean);
+  return `<span onclick="browseTo('/')">/</span>` +
+    parts.map((p, i) => ` <span onclick="browseTo('${esc('/' + parts.slice(0, i + 1).join('/'))}')">${p}</span> /`).join('');
+}
 async function browseTo(path) {
   const r = await fetch('/api/browse?path=' + encodeURIComponent(path)).then(r => r.json());
   if (r.error) return;
   browserPath = r.path;
   document.getElementById('browser-cur-path').textContent = r.path;
-
-  // Breadcrumb
-  const parts = r.path.split('/').filter(Boolean);
-  document.getElementById('browser-crumb').innerHTML =
-    `<span onclick="browseTo('/')">/</span>` +
-    parts.map((p, i) => ` <span onclick="browseTo('/${parts.slice(0,i+1).join('/')}')">${p}</span> /`).join('');
+  document.getElementById('browser-crumb').innerHTML = renderCrumb(r.path, r.sep);
 
   // List
   const list = document.getElementById('browser-list');
   let html = r.parent ? `<div class="browser-item up" onclick="browseTo('${esc(r.parent)}')">↑ ..</div>` : '';
-  html += r.dirs.map(d => `<div class="browser-item" onclick="browseTo('${esc(r.path + '/' + d)}')">📁 ${d}</div>`).join('');
+  html += r.dirs.map(d => `<div class="browser-item" onclick="browseTo('${esc(joinPath(r.path, d, r.sep))}')">📁 ${d}</div>`).join('');
   list.innerHTML = html || '<div style="padding:12px 16px;color:var(--muted);font-size:12px">No subdirectories</div>';
 }
 const esc = s => s.replace(/'/g, "\\'");

@@ -1,0 +1,10 @@
+services:
+  live2motion:
+    build: .
+    container_name: live2motion
+    ports:
+      - "7000:7000"
+    volumes:
+      - ./config.json:/app/config.json
+      - /path/to/your/photos:/data
+    restart: unless-stopped

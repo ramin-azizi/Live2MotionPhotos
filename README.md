@@ -33,37 +33,70 @@ Live2Motion wraps MotionPhoto2 to mux each pair into a single Google Motion Phot
 
 ## Requirements
 
-- macOS or Linux (tested on Debian 13 and macOS)
-- Python 3.9+
-- [ExifTool](https://exiftool.org/) (`sudo apt install libimage-exiftool-perl` on Linux, `brew install exiftool` on macOS)
+- Linux, macOS, or Windows (tested natively on Debian 13 and macOS; Windows works but is less battle-tested — Docker is the more proven path there, see below)
+- Python 3.9+ (native install only — not needed for Docker)
+- [ExifTool](https://exiftool.org/) (`sudo apt install libimage-exiftool-perl` on Linux, `brew install exiftool` on macOS, [exiftool.org](https://exiftool.org/) build on Windows — native install only, not needed for Docker)
+
+The web UI itself is just a browser page — once the server (native or Docker) is running anywhere on your network, you open it from **any** device's browser, Windows included, with nothing to install on the client side.
 
 ---
 
 ## Installation
 
-### 1. Install ExifTool
+Two ways to run it: **Docker** (no Python/ExifTool install needed, identical on every OS — recommended for Windows and macOS) or **native** (recommended for Linux, e.g. as a systemd service on a homelab server).
+
+### Option A: Docker (Linux, macOS, Windows)
+
+Requires [Docker](https://docs.docker.com/get-docker/) (Docker Desktop on macOS/Windows, Docker Engine on Linux).
+
+```bash
+git clone https://github.com/ramin-azizi/Live2MotionPhotos.git
+cd Live2MotionPhotos
+cp config.example.json config.json
+```
+
+Edit `docker-compose.yml` and point the second volume at your photo library:
+
+```yaml
+volumes:
+  - ./config.json:/app/config.json
+  - /path/to/your/photos:/data      # ← change the left side to your actual photo folder
+```
+
+Then in `config.json`, set `"input_directory": "/data"` (that's the path *inside* the container that maps to the folder you mounted — you can also just pick it via the in-app folder browser after starting).
+
+```bash
+docker compose up -d --build
+```
+
+Open **http://your-machine-ip:7000**. To update after pulling new code: `docker compose up -d --build`.
+
+### Option B: Native (Linux / macOS / Windows)
+
+#### 1. Install ExifTool
 
 ```bash
 sudo apt install libimage-exiftool-perl   # Linux
 brew install exiftool                     # macOS
 ```
+On Windows, download the ExifTool executable from [exiftool.org](https://exiftool.org/), rename it to `exiftool.exe`, and put it somewhere on your `PATH`.
 
-### 2. Clone and install Live2Motion
+#### 2. Clone and install Live2Motion
 
 ```bash
 git clone https://github.com/ramin-azizi/Live2MotionPhotos.git
 cd Live2MotionPhotos
 python3 -m venv venv
-venv/bin/pip install -r requirements.txt
-cp config.example.json config.json
+venv/bin/pip install -r requirements.txt      # Windows: venv\Scripts\pip install -r requirements.txt
+cp config.example.json config.json            # Windows: copy config.example.json config.json
 ```
 
 This installs both the web app's dependencies and MotionPhoto2's (the vendored `MotionPhoto2/` folder is run directly as a subprocess — no separate download or build step).
 
-### 3. Run
+#### 3. Run
 
 ```bash
-venv/bin/python app.py
+venv/bin/python app.py      # Windows: venv\Scripts\python app.py
 ```
 
 Then open **http://your-server-ip:7000** in a browser (port 7000 may already be taken by macOS Control Center on a Mac — use a different port for local dev, see below).
@@ -83,7 +116,9 @@ To point at a different (or fake) photo library, edit `input_directory` in `conf
 
 ---
 
-## Running as a systemd service (auto-start on boot)
+## Running as a systemd service (auto-start on boot, Linux only)
+
+For Docker on any OS, `restart: unless-stopped` in `docker-compose.yml` already handles auto-start/restart — no separate service setup needed. On Windows running natively, use Task Scheduler (run `app.py` "at log on", or as a service via [NSSM](https://nssm.cc/)) instead of the systemd unit below.
 
 ```bash
 sudo nano /etc/systemd/system/live2motion.service

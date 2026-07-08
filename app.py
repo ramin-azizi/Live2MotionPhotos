@@ -391,9 +391,9 @@ async def api_progress(request: Request, from_line: int = 0):
 
 
 @app.get("/api/browse")
-def api_browse(path: str = "/home/ramin"):
+def api_browse(path: str = ""):
     try:
-        p = Path(path).resolve()
+        p = (Path(path) if path else Path.home()).resolve()
     except Exception:
         return JSONResponse({"error": "Invalid path"}, status_code=400)
     if not p.exists() or not p.is_dir():
@@ -403,7 +403,9 @@ def api_browse(path: str = "/home/ramin"):
             [d.name for d in p.iterdir() if d.is_dir() and not d.name.startswith(".")],
             key=str.lower,
         )
-        return {"path": str(p), "parent": str(p.parent) if p != p.parent else None, "dirs": dirs}
+        # sep tells the frontend how to join/split this path (Windows uses "\", not "/")
+        return {"path": str(p), "parent": str(p.parent) if p != p.parent else None,
+                "dirs": dirs, "sep": os.sep}
     except PermissionError:
         return JSONResponse({"error": "Permission denied"}, status_code=403)
 
