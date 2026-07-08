@@ -1,5 +1,5 @@
 {
-  "input_directory": "/home/ramin/shared/USB Drive/Shafiqa",
+  "input_directory": "/data",
   "output_directory": "",
   "recursive": true,
   "exif_match": true,

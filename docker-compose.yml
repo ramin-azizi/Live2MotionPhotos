@@ -6,5 +6,8 @@ services:
       - "7000:7000"
     volumes:
       - ./config.json:/app/config.json
-      - /path/to/your/photos:/data
+      # HOST_MEDIA is written to .env automatically by the Docker launcher script
+      # (defaults to your home folder) - no manual editing needed. Everything under
+      # it is browsable/selectable from the in-app folder browser at /data.
+      - ${HOST_MEDIA:-.}:/data
     restart: unless-stopped

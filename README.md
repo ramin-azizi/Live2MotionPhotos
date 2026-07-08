@@ -55,21 +55,17 @@ cd Live2MotionPhotos
 cp config.example.json config.json
 ```
 
-Edit `docker-compose.yml` and point the second volume at your photo library:
+No `docker-compose.yml` editing needed — just double-click:
 
-```yaml
-volumes:
-  - ./config.json:/app/config.json
-  - /path/to/your/photos:/data      # ← change the left side to your actual photo folder
-```
+- **`Start Live2Motion (Docker).command`** (macOS)
+- **`Start Live2Motion (Docker).bat`** (Windows)
+- **`start-live2motion-docker.sh`** (Linux)
 
-Then in `config.json`, set `"input_directory": "/data"` (that's the path *inside* the container that maps to the folder you mounted — you can also just pick it via the in-app folder browser after starting).
+This builds the image, mounts your home folder into the container at `/data` automatically (written to a local `.env` file, not the compose file), starts it in the background, and opens **http://localhost:7000**. From there, use the in-app folder browser to pick the exact photo folder under `/data` — everything is configured through the UI, nothing else to edit.
 
-```bash
-docker compose up -d --build
-```
+If your photos live outside your home folder (a different drive, an external volume), edit `HOST_MEDIA` in `.env` to point there instead — still no `docker-compose.yml` changes required.
 
-Open **http://your-machine-ip:7000**. To update after pulling new code: `docker compose up -d --build`.
+The container keeps running in the background after you close the launcher window (`restart: unless-stopped`). To stop it: `docker compose down`. To update after pulling new code: rerun the launcher (or `docker compose up -d --build`).
 
 ### Option B: Native (Linux / macOS / Windows)
 

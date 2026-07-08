@@ -398,9 +398,15 @@ def api_browse(path: str = ""):
         return JSONResponse({"error": "Invalid path"}, status_code=400)
     if not p.exists() or not p.is_dir():
         return JSONResponse({"error": "Not a directory"}, status_code=404)
+    def is_accessible_dir(entry: Path) -> bool:
+        try:
+            return entry.is_dir()
+        except OSError:
+            return False   # e.g. macOS ~/.Trash has an ACL that blocks stat entirely
+
     try:
         dirs = sorted(
-            [d.name for d in p.iterdir() if d.is_dir() and not d.name.startswith(".")],
+            [d.name for d in p.iterdir() if not d.name.startswith(".") and is_accessible_dir(d)],
             key=str.lower,
         )
         # sep tells the frontend how to join/split this path (Windows uses "\", not "/")
