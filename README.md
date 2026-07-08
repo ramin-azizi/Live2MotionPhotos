@@ -101,6 +101,8 @@ venv/bin/python app.py      # Windows: venv\Scripts\python app.py
 
 Then open **http://your-server-ip:7000** in a browser (port 7000 may already be taken by macOS Control Center on a Mac — use a different port for local dev, see below).
 
+**Running locally on your own computer?** After the one-time setup above, you don't need a terminal again — double-click **`Start Live2Motion.command`** (macOS), **`Start Live2Motion.bat`** (Windows), or run **`./start-live2motion.sh`** (Linux) to start the server and open it in your browser automatically. Closing that window stops the server.
+
 ### Local development on a machine other than the homelab server
 
 You don't need the server or its photo library to work on the FastAPI routes / UI. Run it on any free port:
