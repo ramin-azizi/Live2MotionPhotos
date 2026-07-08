@@ -1,8 +1,8 @@
 # Live2Motion Photos
 
-A self-hosted web UI for converting iPhone Live Photos into Google / Samsung Motion Photos, so they animate natively in Google Photos on Android.
+A web UI for converting iPhone Live Photos into Google / Samsung Motion Photos, so they animate natively in Google Photos on Android. Works two ways: run it **locally** on your own Windows, macOS, or Linux machine and use it entirely by yourself (open `http://localhost:7000` in a browser on that same computer — nothing else required), or **self-host** it on a home server so it's reachable from any device on your network. Same app either way; see [Installation](#installation) for both.
 
-Built as a browser-based frontend around [MotionPhoto2](https://github.com/PetrVys/MotionPhoto2) by PetrVys, adding a real-time progress dashboard, folder browser, scheduled runs, and file-watcher automation — all accessible from any device on your local network.
+Built as a browser-based frontend around [MotionPhoto2](https://github.com/PetrVys/MotionPhoto2) by PetrVys, adding a real-time progress dashboard, folder browser, scheduled runs, and file-watcher automation.
 
 MotionPhoto2's source is vendored in `MotionPhoto2/` (pinned to upstream commit `5848f9b`) and run directly via `python3` — there is no compiled binary to build or download. This repo carries one small patch on top of upstream: a missing paired file (e.g. an image whose video got deleted, or a duplicate `ContentIdentifier` collision) is logged and skipped instead of calling `sys.exit(1)` and killing the whole batch. See `MotionPhoto2/Muxer.py` (`MuxerInputError`) and `MotionPhoto2/motionphoto2.py` (`failed_pairs`) for the diff from upstream.
 
@@ -18,7 +18,7 @@ Live2Motion wraps MotionPhoto2 to mux each pair into a single Google Motion Phot
 
 ## Features
 
-- **Browser UI** — accessible from any device on your local network; no app to install on your phone
+- **Browser UI** — works purely on your own machine (`localhost:7000`) for solo local use, or accessible from any device on your network if self-hosted; no app to install on your phone either way
 - **Real-time progress** — live terminal output with per-file status, colour-coded warnings and errors
 - **Statistics panel** — donut chart showing Completed / Skipped / Errors / Remaining with live updates
 - **Folder browser** — point-and-click navigation of the server filesystem to select input/output directories
