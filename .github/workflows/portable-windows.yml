@@ -41,7 +41,7 @@ jobs:
         shell: pwsh
         run: |
           $url = "https://sourceforge.net/projects/exiftool/files/exiftool-${env:EXIFTOOL_VERSION}_64.zip/download"
-          Invoke-WebRequest $url -OutFile exiftool.zip
+          curl.exe -sL $url -o exiftool.zip
           Expand-Archive exiftool.zip -DestinationPath exiftool-extracted
           $dir = Get-ChildItem exiftool-extracted -Directory | Select-Object -First 1
           Move-Item $dir.FullName bundle/exiftool
