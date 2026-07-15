@@ -67,16 +67,18 @@ If your photos live outside your home folder (a different drive, an external vol
 
 The container keeps running in the background after you close the launcher window (`restart: unless-stopped`). To stop it: `docker compose down`. To update after pulling new code: rerun the launcher (or `docker compose up -d --build`).
 
-### Option A2: Portable (Windows, fully offline)
+### Option A2: Portable (Windows, fully offline) — easiest, no technical knowledge needed
 
-No Python, no Docker, no admin rights, no internet needed after download. Grab
-`Live2Motion-Portable-Windows.zip` from the
-[Releases page](https://github.com/ramin-azizi/Live2MotionPhotos/releases),
-extract it anywhere (a USB stick works), and double-click
-**`Start Live2Motion (Portable).bat`**. Everything — the Python runtime,
-dependencies, and ExifTool — lives inside the extracted folder; nothing is
-installed on your system. Closing the launcher window stops the server; delete
-the folder to "uninstall".
+Nothing to install — no Python, no Docker, no admin rights, no internet needed after the download:
+
+1. Download **`Live2Motion-Portable-Windows.zip`** from the [Releases page](https://github.com/ramin-azizi/Live2MotionPhotos/releases/latest).
+2. Right-click the downloaded ZIP → **Extract All…** and pick any location (your Desktop or even a USB stick is fine).
+3. Open the extracted folder and double-click **`Start Live2Motion (Portable).bat`**. A black window opens (that's the app running) and your browser opens the app at http://localhost:7000 a few seconds later.
+4. In the browser, pick the folder with your Live Photos and click Start.
+
+Everything — the Python runtime, dependencies, and ExifTool — lives inside the extracted folder; nothing is installed on your system. To stop the app, close the black window. To uninstall, delete the folder.
+
+> If Windows shows a "Windows protected your PC" SmartScreen warning the first time, click **More info → Run anyway** — it appears because the file is new/unsigned, not because anything is wrong.
 
 ### Option B: Native (Linux / macOS / Windows)
 
