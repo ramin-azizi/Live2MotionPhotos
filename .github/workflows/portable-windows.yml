@@ -58,7 +58,7 @@ jobs:
         run: |
           bundle/exiftool/exiftool.exe -ver
           Push-Location bundle
-          ./python/python.exe -c "import app; print('app import OK')"
+          ./python/python.exe -c "import sys; sys.path.insert(0, '.'); import app; print('app import OK')"
           Pop-Location
 
       - name: Zip bundle
