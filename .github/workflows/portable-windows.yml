@@ -1,0 +1,78 @@
+name: Portable Windows build
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: "3.12.8"
+  EXIFTOOL_VERSION: "13.59"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download embeddable Python
+        shell: pwsh
+        run: |
+          $url = "https://www.python.org/ftp/python/$env:PYTHON_VERSION/python-$env:PYTHON_VERSION-embed-amd64.zip"
+          Invoke-WebRequest $url -OutFile python-embed.zip
+          Expand-Archive python-embed.zip -DestinationPath bundle/python
+
+      - name: Enable pip in embeddable runtime
+        shell: pwsh
+        run: |
+          $pth = Get-ChildItem bundle/python -Filter "python3*._pth" | Select-Object -First 1
+          (Get-Content $pth.FullName) -replace "^#\s*import site$", "import site" | Set-Content $pth.FullName
+          Invoke-WebRequest https://bootstrap.pypa.io/get-pip.py -OutFile get-pip.py
+          bundle/python/python.exe get-pip.py --no-warn-script-location
+
+      - name: Install dependencies into bundle
+        shell: pwsh
+        run: bundle/python/python.exe -m pip install -r requirements.txt --no-warn-script-location
+
+      - name: Download ExifTool
+        shell: pwsh
+        run: |
+          $url = "https://sourceforge.net/projects/exiftool/files/exiftool-${env:EXIFTOOL_VERSION}_64.zip/download"
+          Invoke-WebRequest $url -OutFile exiftool.zip
+          Expand-Archive exiftool.zip -DestinationPath exiftool-extracted
+          $dir = Get-ChildItem exiftool-extracted -Directory | Select-Object -First 1
+          Move-Item $dir.FullName bundle/exiftool
+          Move-Item "bundle/exiftool/exiftool(-k).exe" bundle/exiftool/exiftool.exe
+
+      - name: Copy app files
+        shell: pwsh
+        run: |
+          Copy-Item app.py, index.html, config.example.json, LICENSE, "Start Live2Motion (Portable).bat" bundle/
+          Copy-Item MotionPhoto2 bundle/MotionPhoto2 -Recurse
+
+      - name: Smoke test bundle
+        shell: pwsh
+        run: |
+          bundle/exiftool/exiftool.exe -ver
+          Push-Location bundle
+          ./python/python.exe -c "import app; print('app import OK')"
+          Pop-Location
+
+      - name: Zip bundle
+        shell: pwsh
+        run: Compress-Archive -Path bundle/* -DestinationPath Live2Motion-Portable-Windows.zip
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Live2Motion-Portable-Windows
+          path: Live2Motion-Portable-Windows.zip
+
+      - name: Attach to release (tag builds)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Live2Motion-Portable-Windows.zip
