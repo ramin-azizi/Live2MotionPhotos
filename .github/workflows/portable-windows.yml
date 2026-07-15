@@ -8,6 +8,7 @@ on:
 env:
   PYTHON_VERSION: "3.12.8"
   EXIFTOOL_VERSION: "13.59"
+  EXIFTOOL_SHA256: "44b512b25af500724ba579d0a53c8fc5851628b692dd5e5d94ae4a15c2cba9ec"
 
 permissions:
   contents: write
@@ -21,6 +22,7 @@ jobs:
       - name: Download embeddable Python
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           $url = "https://www.python.org/ftp/python/$env:PYTHON_VERSION/python-$env:PYTHON_VERSION-embed-amd64.zip"
           Invoke-WebRequest $url -OutFile python-embed.zip
           Expand-Archive python-embed.zip -DestinationPath bundle/python
@@ -31,6 +33,7 @@ jobs:
           $ErrorActionPreference = "Stop"
           $pth = Get-ChildItem bundle/python -Filter "python3*._pth" | Select-Object -First 1
           (Get-Content $pth.FullName) -replace "^#\s*import site$", "import site" | Set-Content $pth.FullName
+          Add-Content $pth.FullName "`n.."
           Invoke-WebRequest https://bootstrap.pypa.io/get-pip.py -OutFile get-pip.py
           bundle/python/python.exe get-pip.py --no-warn-script-location
           if ($LASTEXITCODE -ne 0) { exit 1 }
@@ -49,6 +52,11 @@ jobs:
           $url = "https://sourceforge.net/projects/exiftool/files/exiftool-${env:EXIFTOOL_VERSION}_64.zip/download"
           curl.exe -sL $url -o exiftool.zip
           if ($LASTEXITCODE -ne 0) { exit 1 }
+          $actualHash = (Get-FileHash exiftool.zip -Algorithm SHA256).Hash
+          if ($actualHash -ne $env:EXIFTOOL_SHA256) {
+            Write-Error "ExifTool zip hash mismatch! Expected $env:EXIFTOOL_SHA256, got $actualHash"
+            exit 1
+          }
           Expand-Archive exiftool.zip -DestinationPath exiftool-extracted
           $dir = Get-ChildItem exiftool-extracted -Directory | Select-Object -First 1
           Move-Item $dir.FullName bundle/exiftool
@@ -59,6 +67,7 @@ jobs:
         run: |
           Copy-Item app.py, index.html, config.example.json, LICENSE, "Start Live2Motion (Portable).bat" bundle/
           Copy-Item MotionPhoto2 bundle/MotionPhoto2 -Recurse
+          Get-ChildItem bundle -Recurse -Directory -Filter __pycache__ | Remove-Item -Recurse -Force
 
       - name: Smoke test bundle
         shell: pwsh
@@ -67,7 +76,9 @@ jobs:
           bundle/exiftool/exiftool.exe -ver
           if ($LASTEXITCODE -ne 0) { exit 1 }
           Push-Location bundle
-          ./python/python.exe -c "import sys; sys.path.insert(0, '.'); import app; print('app import OK')"
+          ./python/python.exe -c "import app; print('app import OK')"
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          ./python/python.exe -c "import uvicorn, importlib; importlib.import_module('app'); print('uvicorn+app OK')"
           if ($LASTEXITCODE -ne 0) { exit 1 }
           Pop-Location
 

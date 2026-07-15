@@ -34,8 +34,8 @@ Live2Motion wraps MotionPhoto2 to mux each pair into a single Google Motion Phot
 ## Requirements
 
 - Linux, macOS, or Windows (tested natively on Debian 13 and macOS; Windows works but is less battle-tested — Docker is the more proven path there, see below)
-- Python 3.9+ (native install only — not needed for Docker)
-- [ExifTool](https://exiftool.org/) (`sudo apt install libimage-exiftool-perl` on Linux, `brew install exiftool` on macOS, [exiftool.org](https://exiftool.org/) build on Windows — native install only, not needed for Docker)
+- Python 3.9+ (native install only — not needed for Docker or the portable Windows ZIP, which bundles its own Python)
+- [ExifTool](https://exiftool.org/) (`sudo apt install libimage-exiftool-perl` on Linux, `brew install exiftool` on macOS, [exiftool.org](https://exiftool.org/) build on Windows — native install only, not needed for Docker or the portable Windows ZIP, which bundles its own ExifTool)
 
 The web UI itself is just a browser page — once the server (native or Docker) is running anywhere on your network, you open it from **any** device's browser, Windows included, with nothing to install on the client side.
 
