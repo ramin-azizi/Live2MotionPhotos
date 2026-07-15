@@ -43,7 +43,7 @@ The web UI itself is just a browser page — once the server (native or Docker) 
 
 ## Installation
 
-Two ways to run it: **Docker** (no Python/ExifTool install needed, identical on every OS — recommended for Windows and macOS) or **native** (recommended for Linux, e.g. as a systemd service on a homelab server).
+Three ways to run it: **Docker** (no Python/ExifTool install needed, identical on every OS — recommended for Windows and macOS), **portable** (Windows ZIP, fully offline), or **native** (recommended for Linux, e.g. as a systemd service on a homelab server).
 
 ### Option A: Docker (Linux, macOS, Windows)
 
@@ -66,6 +66,17 @@ This builds the image, mounts your home folder into the container at `/data` aut
 If your photos live outside your home folder (a different drive, an external volume), edit `HOST_MEDIA` in `.env` to point there instead — still no `docker-compose.yml` changes required.
 
 The container keeps running in the background after you close the launcher window (`restart: unless-stopped`). To stop it: `docker compose down`. To update after pulling new code: rerun the launcher (or `docker compose up -d --build`).
+
+### Option A2: Portable (Windows, fully offline)
+
+No Python, no Docker, no admin rights, no internet needed after download. Grab
+`Live2Motion-Portable-Windows.zip` from the
+[Releases page](https://github.com/ramin-azizi/Live2MotionPhotos/releases),
+extract it anywhere (a USB stick works), and double-click
+**`Start Live2Motion (Portable).bat`**. Everything — the Python runtime,
+dependencies, and ExifTool — lives inside the extracted folder; nothing is
+installed on your system. Closing the launcher window stops the server; delete
+the folder to "uninstall".
 
 ### Option B: Native (Linux / macOS / Windows)
 
