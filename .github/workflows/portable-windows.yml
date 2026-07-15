@@ -28,20 +28,27 @@ jobs:
       - name: Enable pip in embeddable runtime
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           $pth = Get-ChildItem bundle/python -Filter "python3*._pth" | Select-Object -First 1
           (Get-Content $pth.FullName) -replace "^#\s*import site$", "import site" | Set-Content $pth.FullName
           Invoke-WebRequest https://bootstrap.pypa.io/get-pip.py -OutFile get-pip.py
           bundle/python/python.exe get-pip.py --no-warn-script-location
+          if ($LASTEXITCODE -ne 0) { exit 1 }
 
       - name: Install dependencies into bundle
         shell: pwsh
-        run: bundle/python/python.exe -m pip install -r requirements.txt --no-warn-script-location
+        run: |
+          $ErrorActionPreference = "Stop"
+          bundle/python/python.exe -m pip install -r requirements.txt --no-warn-script-location
+          if ($LASTEXITCODE -ne 0) { exit 1 }
 
       - name: Download ExifTool
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           $url = "https://sourceforge.net/projects/exiftool/files/exiftool-${env:EXIFTOOL_VERSION}_64.zip/download"
           curl.exe -sL $url -o exiftool.zip
+          if ($LASTEXITCODE -ne 0) { exit 1 }
           Expand-Archive exiftool.zip -DestinationPath exiftool-extracted
           $dir = Get-ChildItem exiftool-extracted -Directory | Select-Object -First 1
           Move-Item $dir.FullName bundle/exiftool
@@ -56,9 +63,12 @@ jobs:
       - name: Smoke test bundle
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           bundle/exiftool/exiftool.exe -ver
+          if ($LASTEXITCODE -ne 0) { exit 1 }
           Push-Location bundle
           ./python/python.exe -c "import sys; sys.path.insert(0, '.'); import app; print('app import OK')"
+          if ($LASTEXITCODE -ne 0) { exit 1 }
           Pop-Location
 
       - name: Zip bundle
