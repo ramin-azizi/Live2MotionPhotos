@@ -391,8 +391,23 @@ async def api_progress(request: Request, from_line: int = 0):
 
 
 
+THIS_PC = "This PC"  # sentinel path: virtual root listing all Windows drives
+
+
+def list_windows_drives() -> list:
+    if sys.platform != "win32":
+        return []
+    import ctypes
+    import string
+    bitmask = ctypes.windll.kernel32.GetLogicalDrives()
+    return [f"{letter}:\\" for i, letter in enumerate(string.ascii_uppercase) if bitmask & (1 << i)]
+
+
 @app.get("/api/browse")
 def api_browse(path: str = ""):
+    if path == THIS_PC:
+        return {"path": THIS_PC, "parent": None, "dirs": list_windows_drives(),
+                "sep": os.sep, "root_list": True}
     try:
         p = (Path(path) if path else Path.home()).resolve()
     except Exception:
@@ -412,14 +427,18 @@ def api_browse(path: str = ""):
         except OSError:
             return False   # e.g. macOS ~/.Trash has an ACL that blocks stat entirely
 
+    # On Windows, a drive's parent is itself (there's no shared root across
+    # drives) - send the user to the virtual drive list instead of a dead end.
+    at_windows_drive_root = p == p.parent and sys.platform == "win32"
+    parent = THIS_PC if at_windows_drive_root else (str(p.parent) if p != p.parent else None)
+
     try:
         dirs = sorted(
             [d.name for d in p.iterdir() if not d.name.startswith(".") and is_accessible_dir(d)],
             key=str.lower,
         )
         # sep tells the frontend how to join/split this path (Windows uses "\", not "/")
-        return {"path": str(p), "parent": str(p.parent) if p != p.parent else None,
-                "dirs": dirs, "sep": os.sep}
+        return {"path": str(p), "parent": parent, "dirs": dirs, "sep": os.sep}
     except PermissionError:
         return JSONResponse({"error": "Permission denied"}, status_code=403)
 
