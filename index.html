@@ -562,7 +562,11 @@ function renderCrumb(path, sep) {
 }
 async function browseTo(path) {
   const r = await fetch('/api/browse?path=' + encodeURIComponent(path)).then(r => r.json());
-  if (r.error) return;
+  if (r.error) {
+    document.getElementById('browser-list').innerHTML =
+      `<div style="padding:12px 16px;color:var(--muted);font-size:12px">${esc(r.error)}: ${esc(path)}</div>`;
+    return;
+  }
   browserPath = r.path;
   document.getElementById('browser-cur-path').textContent = r.path;
   document.getElementById('browser-crumb').innerHTML = renderCrumb(r.path, r.sep);

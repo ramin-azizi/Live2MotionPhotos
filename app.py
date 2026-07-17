@@ -398,6 +398,13 @@ def api_browse(path: str = ""):
     except Exception:
         return JSONResponse({"error": "Invalid path"}, status_code=400)
     if not p.exists() or not p.is_dir():
+        # Saved config paths are sometimes POSIX-style (e.g. "/data" from the
+        # Docker default) and don't exist as-is on Windows, where a leading
+        # "/" resolves to the root of the current drive. Fall back to the
+        # user's home directory instead of leaving the browser dead-ended.
+        home = Path.home().resolve()
+        if p != home:
+            return api_browse(str(home))
         return JSONResponse({"error": "Not a directory"}, status_code=404)
     def is_accessible_dir(entry: Path) -> bool:
         try:
