@@ -19,10 +19,13 @@ if not exist config.json (
 
 set "PATH=%~dp0exiftool;%PATH%"
 
-start "" cmd /c "timeout /t 3 >nul && start http://localhost:7000"
+if exist .port del .port
+
+start "" cmd /c "timeout /t 3 >nul & if exist .port (for /f %%p in (.port) do start http://localhost:%%p) else (start http://localhost:7000)"
 
 echo Starting Live2Motion Photos ^(portable^)...
-echo Open http://localhost:7000 in your browser if it doesn't open automatically.
+echo If port 7000 is busy, another port will be used automatically - watch this
+echo window for the actual address, or check the browser tab that opens.
 echo Close this window to stop the server.
 echo.
 "python\python.exe" app.py

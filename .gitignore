@@ -2,6 +2,7 @@ venv/
 __pycache__/
 *.py[cod]
 config.json
+.port
 .env
 *.log
 .DS_Store

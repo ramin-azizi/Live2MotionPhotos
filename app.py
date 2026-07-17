@@ -5,6 +5,7 @@ import asyncio
 import json
 import os
 import re
+import socket
 import subprocess
 import sys
 import threading
@@ -148,14 +149,14 @@ watch_observer: Optional[Observer] = None
 def load_config() -> dict:
     if CONFIG_FILE.exists():
         try:
-            return {**DEFAULT_CONFIG, **json.loads(CONFIG_FILE.read_text())}
+            return {**DEFAULT_CONFIG, **json.loads(CONFIG_FILE.read_text(encoding="utf-8"))}
         except Exception:
             pass
     return DEFAULT_CONFIG.copy()
 
 
 def save_config(cfg: dict):
-    CONFIG_FILE.write_text(json.dumps(cfg, indent=2))
+    CONFIG_FILE.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
 
 
 # ─── Run logic ────────────────────────────────────────────────────────────────
@@ -299,7 +300,7 @@ app = FastAPI(title="Live2Motion Photos", lifespan=lifespan)
 
 @app.get("/")
 def root():
-    return HTMLResponse((BASE_DIR / "index.html").read_text())
+    return HTMLResponse((BASE_DIR / "index.html").read_text(encoding="utf-8"))
 
 
 @app.get("/api/config")
@@ -596,5 +597,30 @@ async def api_cleanup(request: Request):
     return {"deleted": len(deleted), "errors": errors}
 
 
+DEFAULT_PORT = 7000
+PORT_FILE = BASE_DIR / ".port"
+
+
+def find_available_port(preferred: int, host: str = "0.0.0.0", attempts: int = 50) -> int:
+    """Return `preferred` if free, otherwise the next free port after it."""
+    for port in range(preferred, preferred + attempts):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            try:
+                sock.bind((host, port))
+            except OSError:
+                continue
+            return port
+    raise RuntimeError(f"No available port found in range {preferred}-{preferred + attempts - 1}")
+
+
 if __name__ == "__main__":
-    uvicorn.run("app:app", host="0.0.0.0", port=7000, reload=False, log_level="info")
+    port = find_available_port(DEFAULT_PORT)
+    if port != DEFAULT_PORT:
+        print(f"Port {DEFAULT_PORT} is already in use - using port {port} instead.")
+    try:
+        PORT_FILE.write_text(str(port), encoding="utf-8")
+    except OSError:
+        pass
+    print(f"Live2Motion Photos will be available at http://localhost:{port}")
+    uvicorn.run("app:app", host="0.0.0.0", port=port, reload=False, log_level="info")

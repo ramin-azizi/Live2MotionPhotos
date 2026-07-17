@@ -39,6 +39,8 @@ if errorlevel 1 (
   )
 )
 
-start "" cmd /c "timeout /t 2 >nul && start http://localhost:7000"
+if exist .port del .port
+
+start "" cmd /c "timeout /t 2 >nul & if exist .port (for /f %%p in (.port) do start http://localhost:%%p) else (start http://localhost:7000)"
 venv\Scripts\python app.py
 pause

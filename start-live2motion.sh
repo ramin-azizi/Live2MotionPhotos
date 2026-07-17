@@ -38,5 +38,12 @@ if ! command -v exiftool >/dev/null 2>&1; then
   fi
 fi
 
-( sleep 2 && xdg-open "http://localhost:7000" 2>/dev/null ) &
+rm -f .port
+( sleep 2
+  if [ -f .port ]; then
+    xdg-open "http://localhost:$(cat .port)" 2>/dev/null
+  else
+    xdg-open "http://localhost:7000" 2>/dev/null
+  fi
+) &
 venv/bin/python app.py

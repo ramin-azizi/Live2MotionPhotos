@@ -35,5 +35,12 @@ if ! command -v exiftool >/dev/null 2>&1; then
   fi
 fi
 
-( sleep 2 && open "http://localhost:7000" ) &
+rm -f .port
+( sleep 2
+  if [ -f .port ]; then
+    open "http://localhost:$(cat .port)"
+  else
+    open "http://localhost:7000"
+  fi
+) &
 venv/bin/python app.py
