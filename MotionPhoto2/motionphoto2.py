@@ -13,6 +13,12 @@ import sys
 
 from pathlib import Path
 
+# The portable Windows build's embeddable Python ships a ._pth file, which
+# puts the interpreter in isolated mode - it no longer auto-adds the running
+# script's own directory to sys.path, so sibling imports below (Muxer, utils)
+# fail with ModuleNotFoundError unless we add it back explicitly.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
 try:
     # Gooey pulls in wxPython, which has no prebuilt wheel on some platforms
     # (e.g. this project's homelab server) and is only needed for the GUI mode

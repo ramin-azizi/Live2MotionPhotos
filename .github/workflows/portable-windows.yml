@@ -80,6 +80,12 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit 1 }
           ./python/python.exe -c "import uvicorn, importlib; importlib.import_module('app'); print('uvicorn+app OK')"
           if ($LASTEXITCODE -ne 0) { exit 1 }
+          # Run it the same way app.py's subprocess does (embeddable Python's
+          # ._pth file disables auto-adding the script's own directory to
+          # sys.path, which previously broke MotionPhoto2's sibling imports).
+          ./python/python.exe MotionPhoto2/motionphoto2.py --help | Out-Null
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Write-Host "motionphoto2.py subprocess invocation OK"
           Pop-Location
 
       - name: Zip bundle
