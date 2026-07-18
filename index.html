@@ -549,16 +549,16 @@ function renderCrumb(path, sep) {
     if (!m) return esc(path);
     const [, root, rest] = m;
     let acc = root;
-    let html = `<span onclick="browseTo('${esc(root)}')">${esc(root)}</span>`;
+    let html = `<span onclick="browseTo('${escJs(root)}')">${esc(root)}</span>`;
     rest.split('\\').filter(Boolean).forEach(p => {
       acc = joinPath(acc, p, sep);
-      html += ` <span onclick="browseTo('${esc(acc)}')">${p}</span> \\`;
+      html += ` <span onclick="browseTo('${escJs(acc)}')">${p}</span> \\`;
     });
     return html;
   }
   const parts = path.split('/').filter(Boolean);
   return `<span onclick="browseTo('/')">/</span>` +
-    parts.map((p, i) => ` <span onclick="browseTo('${esc('/' + parts.slice(0, i + 1).join('/'))}')">${p}</span> /`).join('');
+    parts.map((p, i) => ` <span onclick="browseTo('${escJs('/' + parts.slice(0, i + 1).join('/'))}')">${p}</span> /`).join('');
 }
 async function browseTo(path) {
   const r = await fetch('/api/browse?path=' + encodeURIComponent(path)).then(r => r.json());
@@ -574,13 +574,17 @@ async function browseTo(path) {
 
   // List
   const list = document.getElementById('browser-list');
-  let html = r.parent ? `<div class="browser-item up" onclick="browseTo('${esc(r.parent)}')">↑ ..</div>` : '';
+  let html = r.parent ? `<div class="browser-item up" onclick="browseTo('${escJs(r.parent)}')">↑ ..</div>` : '';
   // Windows drive list ("This PC"): entries are already full paths (e.g. "D:\"),
   // not names to join onto the current one.
-  html += r.dirs.map(d => `<div class="browser-item" onclick="browseTo('${esc(r.root_list ? d : joinPath(r.path, d, r.sep))}')">📁 ${d}</div>`).join('');
+  html += r.dirs.map(d => `<div class="browser-item" onclick="browseTo('${escJs(r.root_list ? d : joinPath(r.path, d, r.sep))}')">📁 ${d}</div>`).join('');
   list.innerHTML = html || '<div style="padding:12px 16px;color:var(--muted);font-size:12px">No subdirectories</div>';
 }
 const esc = s => s.replace(/'/g, "\\'");
+// Windows paths contain backslashes, which must be escaped before the quote
+// escape below, or a trailing "\" (e.g. "D:\") swallows the closing quote in
+// onclick="browseTo('...')" and silently breaks the handler.
+const escJs = s => s.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function init() {
