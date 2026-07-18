@@ -639,6 +639,10 @@ const gc = id => document.getElementById(id)?.checked ?? false;
 
 // ── Run control ───────────────────────────────────────────────────────────────
 async function startRun() {
+  // Save the currently displayed settings first, so a folder just picked in
+  // the browser (but not yet saved) doesn't get silently ignored in favor of
+  // stale settings still on disk.
+  await fetch('/api/config', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(formConfig())});
   const r = await fetch('/api/run', {method:'POST'});
   if (r.status === 409) { flash('Already running', true); return; }
   clearTerm();
